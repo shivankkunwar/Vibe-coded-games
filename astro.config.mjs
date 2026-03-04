@@ -11,6 +11,9 @@ export default defineConfig({
     },
     optimizeDeps: {
       include: ['three']
+    },
+    preview: {
+      allowedHosts: true
     }
   }
 });
