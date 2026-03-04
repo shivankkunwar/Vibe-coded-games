@@ -1,0 +1,522 @@
+---
+import Layout from '../../layouts/Layout.astro';
+
+export function getStaticPaths() {
+  return [
+    { params: { gameId: 'neon-blitz' } },
+  ];
+}
+
+const { gameId } = Astro.params;
+
+const games: Record<string, { title: string; color: string }> = {
+  'neon-blitz': { title: 'Neon Blitz', color: '#f59e0b' },
+};
+
+const game = games[gameId || ''];
+
+if (!game) {
+  return Astro.redirect('/');
+}
+---
+
+<Layout title={`${game.title} | shvnk.in`}>
+  <div class="game-container">
+    <header class="game-header">
+      <a href="/" class="back-btn">
+        <span class="back-icon">←</span>
+        <span class="back-text">Exit</span>
+      </a>
+      <h1 class="game-title">{game.title}</h1>
+      <div class="score-display">
+        <span class="score-label">Score</span>
+        <span class="score-value" id="score">0</span>
+      </div>
+    </header>
+    
+    <div class="game-wrapper" transition:name={`game-visual-${gameId}`}>
+      <div id="game-canvas" class="game-canvas"></div>
+      <div class="game-overlay" id="game-overlay">
+        <div class="overlay-content">
+          <h2 class="overlay-title" id="overlay-title">Neon Blitz</h2>
+          <p class="overlay-subtitle" id="overlay-subtitle">Press SPACE or TAP to start</p>
+          <button class="start-btn" id="start-btn">Start Game</button>
+        </div>
+      </div>
+      <div class="confetti-container" id="confetti"></div>
+    </div>
+    
+    <div class="controls-hint">
+      <span>Arrow Keys / WASD to move</span>
+      <span>•</span>
+      <span>Collect orbs, avoid red</span>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import Phaser from 'phaser';
+
+  function createConfetti() {
+    const container = document.getElementById('confetti');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    const colors = ['#f59e0b', '#06b6d4', '#10b981', '#f43f5e', '#8b5cf6'];
+    
+    for (let i = 0; i < 50; i++) {
+      const confetto = document.createElement('div');
+      confetto.className = 'confetto';
+      confetto.style.setProperty('--x', `${Math.random() * 100 - 50}%`);
+      confetto.style.setProperty('--r', `${Math.random() * 360}deg}`);
+      confetto.style.setProperty('--d', `${Math.random() * 1 + 0.5}s`);
+      confetto.style.setProperty('--c', colors[Math.floor(Math.random() * colors.length)]);
+      container.appendChild(confetto);
+    }
+    
+    setTimeout(() => container.innerHTML = '', 2000);
+  }
+
+  class NeonBlitz extends Phaser.Scene {
+    constructor() {
+      super({ key: 'NeonBlitz' });
+      this.score = 0;
+      this.player = null;
+      this.cursors = null;
+      this.wasd = null;
+      this.orbs = null;
+      this.enemies = null;
+      this.isGameOver = false;
+      this.isPlaying = false;
+      this.spawnTimer = 0;
+    }
+
+    create() {
+      this.cameras.main.setBackgroundColor('#0a0a0a');
+      
+      this.add.grid(400, 300, 800, 600, 40, 40, 0x141414, 1, 0x1a1a1a, 0.3);
+      
+      this.orbs = this.physics.add.group();
+      this.enemies = this.physics.add.group();
+      
+      this.player = this.add.circle(400, 300, 16, 0xf59e0b);
+      this.physics.add.existing(this.player);
+      
+      this.cursors = this.input.keyboard.createCursorKeys();
+      this.wasd = this.input.keyboard.addKeys({
+        up: Phaser.Input.Keyboard.KeyCodes.W,
+        down: Phaser.Input.Keyboard.KeyCodes.S,
+        left: Phaser.Input.Keyboard.KeyCodes.A,
+        right: Phaser.Input.Keyboard.KeyCodes.D
+      });
+      
+      this.physics.add.overlap(this.player, this.orbs, this.collectOrb, null, this);
+      this.physics.add.overlap(this.player, this.enemies, this.hitEnemy, null, this);
+      
+      this.input.keyboard.once('keydown-SPACE', this.startGame, this);
+      this.input.on('pointerdown', this.startGame, this);
+      
+      this.showStartScreen();
+    }
+
+    showStartScreen() {
+      document.getElementById('game-overlay')?.classList.add('visible');
+    }
+
+    startGame() {
+      if (this.isPlaying) return;
+      
+      this.isPlaying = true;
+      this.isGameOver = false;
+      this.score = 0;
+      this.updateScore();
+      
+      this.player.body.setVelocity(0);
+      this.player.setPosition(400, 300);
+      
+      document.getElementById('game-overlay')?.classList.remove('visible');
+    }
+
+    update(time: number, delta: number) {
+      if (!this.isPlaying || this.isGameOver) return;
+
+      const speed = 300;
+      const velocity = this.player.body.velocity;
+      
+      velocity.set(0);
+      
+      if (this.cursors.left.isDown || this.wasd.left.isDown) velocity.x = -speed;
+      if (this.cursors.right.isDown || this.wasd.right.isDown) velocity.x = speed;
+      if (this.cursors.up.isDown || this.wasd.up.isDown) velocity.y = -speed;
+      if (this.cursors.down.isDown || this.wasd.down.isDown) velocity.y = speed;
+      
+      if (velocity.x !== 0 && velocity.y !== 0) {
+        velocity.x *= 0.707;
+        velocity.y *= 0.707;
+      }
+      
+      this.player.x = Phaser.Math.Clamp(this.player.x, 20, 780);
+      this.player.y = Phaser.Math.Clamp(this.player.y, 20, 580);
+      
+      this.spawnTimer += delta;
+      if (this.spawnTimer > 800) {
+        this.spawnTimer = 0;
+        this.spawnOrb();
+        
+        if (this.score > 10) this.spawnEnemy();
+      }
+      
+      this.orbs.children.each((orb: any) => {
+        if (orb.active) {
+          const angle = time * 0.002 + orb.orbIndex;
+          orb.setScale(1 + Math.sin(angle) * 0.2);
+        }
+      });
+    }
+
+    spawnOrb() {
+      const x = Phaser.Math.Between(40, 760);
+      const y = Phaser.Math.Between(40, 560);
+      const orb = this.add.circle(x, y, 10, 0x06b6d4);
+      this.physics.add.existing(orb);
+      (orb as any).orbIndex = Math.random() * Math.PI * 2;
+      this.orbs.add(orb);
+      
+      this.tweens.add({
+        targets: orb,
+        scale: { from: 0, to: 1 },
+        duration: 200,
+        ease: 'Back.easeOut'
+      });
+    }
+
+    spawnEnemy() {
+      const x = Phaser.Math.Between(40, 760);
+      const y = Phaser.Math.Between(40, 560);
+      const enemy = this.add.circle(x, y, 14, 0xef4444);
+      this.physics.add.existing(enemy);
+      
+      const angle = Phaser.Math.Angle.Between(x, y, this.player.x, this.player.y);
+      const speed = Phaser.Math.Between(80, 150);
+      (enemy.body as any).setVelocity(
+        Math.cos(angle) * speed,
+        Math.sin(angle) * speed
+      );
+      
+      this.enemies.add(enemy);
+      
+      this.tweens.add({
+        targets: enemy,
+        scale: { from: 0, to: 1 },
+        duration: 200,
+        ease: 'Back.easeOut'
+      });
+    }
+
+    collectOrb(player: any, orb: any) {
+      orb.destroy();
+      this.score += 10;
+      this.updateScore();
+      
+      this.tweens.add({
+        targets: player,
+        scale: { from: 1.3, to: 1 },
+        duration: 150,
+        ease: 'Quad.easeOut'
+      });
+    }
+
+    hitEnemy(player: any, enemy: any) {
+      this.gameOver();
+    }
+
+    gameOver() {
+      this.isGameOver = true;
+      this.isPlaying = false;
+      
+      this.physics.pause();
+      
+      const overlay = document.getElementById('game-overlay');
+      const title = document.getElementById('overlay-title');
+      const subtitle = document.getElementById('overlay-subtitle');
+      const btn = document.getElementById('start-btn');
+      
+      if (title) title.textContent = this.score >= 100 ? 'Amazing!' : 'Game Over';
+      if (subtitle) subtitle.textContent = `Final Score: ${this.score}`;
+      if (btn) btn.textContent = 'Play Again';
+      
+      if (this.score >= 50) {
+        createConfetti();
+      }
+      
+      overlay?.classList.add('visible');
+      
+      this.tweens.add({
+        targets: this.player,
+        alpha: 0.3,
+        duration: 300
+      });
+    }
+
+    updateScore() {
+      const scoreEl = document.getElementById('score');
+      if (scoreEl) {
+        const targetScore = this.score;
+        const currentScore = parseInt(scoreEl.textContent || '0');
+        if (targetScore === currentScore) return;
+        
+        const duration = 300;
+        const startTime = performance.now();
+        const animate = (currentTime: number) => {
+          const elapsed = currentTime - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+          const eased = 1 - Math.pow(1 - progress, 3);
+          const current = Math.round(currentScore + (targetScore - currentScore) * eased);
+          scoreEl.textContent = current.toString();
+          
+          if (progress < 1) {
+            requestAnimationFrame(animate);
+          }
+        };
+        requestAnimationFrame(animate);
+      }
+    }
+
+    restart() {
+      this.isGameOver = false;
+      this.score = 0;
+      this.updateScore();
+      
+      this.orbs.clear(true, true);
+      this.enemies.clear(true, true);
+      
+      this.player.setPosition(400, 300);
+      this.player.setAlpha(1);
+      
+      this.physics.resume();
+    }
+  }
+
+  const config: Phaser.Types.Core.GameConfig = {
+    type: Phaser.AUTO,
+    parent: 'game-canvas',
+    width: 800,
+    height: 600,
+    backgroundColor: '#0a0a0a',
+    physics: {
+      default: 'arcade',
+      arcade: {
+        gravity: { y: 0 },
+        debug: false
+      }
+    },
+    scene: NeonBlitz
+  };
+
+  const game = new Phaser.Game(config);
+
+  document.getElementById('start-btn')?.addEventListener('click', () => {
+    const scene = game.scene.getScene('NeonBlitz') as NeonBlitz;
+    if (scene.isGameOver) {
+      scene.restart();
+    }
+    scene.startGame();
+  });
+</script>
+
+<style>
+  .game-container {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 1.5rem;
+    background: var(--color-bg);
+  }
+
+  .game-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 800px;
+    width: 100%;
+    margin: 0 auto 1.5rem;
+  }
+
+  .back-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+    transition: all 0.3s var(--ease-out-expo);
+  }
+
+  .back-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+    transform: translateX(-4px);
+  }
+
+  .back-btn:active {
+    transform: translateX(-2px) scale(0.98);
+  }
+
+  .back-icon {
+    font-size: 1rem;
+    transition: transform 0.3s var(--ease-out-expo);
+  }
+
+  .back-btn:hover .back-icon {
+    transform: translateX(-2px);
+  }
+
+  .game-title {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    font-weight: 400;
+  }
+
+  .score-display {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+  }
+
+  .score-label {
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--color-text-muted);
+  }
+
+  .score-value {
+    font-family: var(--font-body);
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--color-accent);
+  }
+
+  .game-wrapper {
+    position: relative;
+    max-width: 800px;
+    width: 100%;
+    aspect-ratio: 4/3;
+    margin: 0 auto;
+    border-radius: 1rem;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    background: #0a0a0a;
+  }
+
+  .game-canvas {
+    width: 100%;
+    height: 100%;
+  }
+
+  .game-canvas canvas {
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  .game-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(10, 10, 10, 0.92);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s var(--ease-out-expo), transform 0.4s var(--ease-out-expo);
+    transform: scale(0.95);
+  }
+
+  .game-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: scale(1);
+  }
+
+  .overlay-content {
+    text-align: center;
+    transform: translateY(10px);
+    transition: transform 0.4s var(--ease-out-expo);
+  }
+
+  .game-overlay.visible .overlay-content {
+    transform: translateY(0);
+  }
+
+  .overlay-title {
+    font-family: var(--font-display);
+    font-size: 3rem;
+    font-weight: 400;
+    margin-bottom: 0.5rem;
+  }
+
+  .overlay-subtitle {
+    font-size: 1rem;
+    color: var(--color-text-muted);
+    margin-bottom: 2rem;
+  }
+
+  .start-btn {
+    padding: 1rem 3rem;
+    background: var(--color-accent);
+    border: none;
+    border-radius: 0.5rem;
+    color: var(--color-bg);
+    font-family: var(--font-body);
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.3s var(--ease-out-expo);
+  }
+
+  .start-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 10px 30px -10px var(--color-accent);
+  }
+
+  .controls-hint {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .confetti-container {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .confetto {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background: var(--c);
+    top: 50%;
+    left: 50%;
+    animation: confetti-fall var(--d) ease-out forwards;
+    transform: translate(-50%, -50%) rotate(var(--r));
+  }
+
+  @keyframes confetti-fall {
+    to {
+      transform: translate(calc(-50% + var(--x)), 200px) rotate(calc(var(--r) + 720deg));
+      opacity: 0;
+    }
+  }
+</style>
