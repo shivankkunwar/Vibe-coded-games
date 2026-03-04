@@ -3,31 +3,35 @@ import Layout from '../layouts/Layout.astro';
 
 const games = [
   {
-    id: 'neon-blitz',
-    title: 'Neon Blitz',
-    description: 'Fast-paced arcade action. Dodge, collect, survive.',
-    accent: '#F43F5E',
-    accentDark: '#BE123C',
-    accentLight: '#FFF1F2',
-    status: 'playable'
+    id: 'escape-room',
+    title: 'The Forgotten Lab',
+    description: 'Solve puzzles. Find clues. Escape in time.',
+    accent: '#06B6D4',
+    accentDark: '#0E7490',
+    accentLight: '#ECFEFF',
+    status: 'playable',
+    tag: 'ESCAPE',
+    href: '/games/escape-room'
   },
   {
-    id: 'cosmic-drifter',
-    title: 'Cosmic Drifter',
-    description: 'Navigate the void. Minimalist space survival.',
+    id: 'game-2',
+    title: 'Coming Soon',
+    description: 'Something exciting is brewing.',
     accent: '#0EA5E9',
     accentDark: '#0369A1',
     accentLight: '#F0F9FF',
-    status: 'coming-soon'
+    status: 'coming-soon',
+    tag: 'TBA'
   },
   {
-    id: 'pixel-dungeon',
-    title: 'Pixel Dungeon',
-    description: 'Roguelike adventures in retro style.',
+    id: 'game-3',
+    title: 'Coming Soon',
+    description: 'Something exciting is brewing.',
     accent: '#A855F7',
     accentDark: '#7E22CE',
     accentLight: '#FAF5FF',
-    status: 'coming-soon'
+    status: 'coming-soon',
+    tag: 'TBA'
   }
 ];
 ---
@@ -45,59 +49,88 @@ const games = [
 
     <main class="games-grid">
       {games.map((game, index) => (
-        <a 
-          href={game.status === 'playable' ? `/games/${game.id}` : '#'} 
-          class={`game-card ${game.status}`}
-          style={`--accent: ${game.accent}; --accent-dark: ${game.accentDark}; --accent-light: ${game.accentLight}; --delay: ${index * 120}ms`}
-          data-game-id={game.id}
-        >
-          <div class="game-visual" transition:name={`game-visual-${game.id}`}>
-            <div class="visual-pattern"></div>
-            <div class="visual-shine"></div>
-            <div class="visual-icon" transition:name={`game-icon-${game.id}`}>
-              {game.status === 'playable' ? (
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+        game.status === 'playable' ? (
+          <a 
+            href={`/games/${game.id}`}
+            class={`game-card ${game.status}`}
+            style={`--accent: ${game.accent}; --accent-dark: ${game.accentDark}; --accent-light: ${game.accentLight}; --delay: ${index * 140}ms`}
+            data-game-id={game.id}
+          >
+            <div class="game-visual" transition:name={`game-visual-${game.id}`}>
+              <div class="visual-bg"></div>
+              <div class="visual-orb orb-1"></div>
+              <div class="visual-orb orb-2"></div>
+              <div class="visual-grid"></div>
+              <div class="visual-shine"></div>
+              <span class="genre-tag">{game.tag}</span>
+              <div class="visual-icon" transition:name={`game-icon-${game.id}`}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="none">
                   <polygon points="5 3 19 12 5 21 5 3"/>
                 </svg>
-              ) : (
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              </div>
+            </div>
+            <div class="game-info">
+              <div class="game-meta">
+                <h2 class="game-title">{game.title}</h2>
+                <span class="status-playable">
+                  <span class="status-dot"></span>
+                  Live
+                </span>
+              </div>
+              <p class="game-desc">{game.description}</p>
+              <div class="play-cta">
+                <span class="cta-text">Play Now</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="cta-arrow">
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                  <polyline points="12 5 19 12 12 19"/>
+                </svg>
+              </div>
+            </div>
+          </a>
+        ) : (
+          <div 
+            class={`game-card ${game.status}`}
+            style={`--accent: ${game.accent}; --accent-dark: ${game.accentDark}; --accent-light: ${game.accentLight}; --delay: ${index * 140}ms`}
+          >
+            <div class="game-visual">
+              <div class="visual-bg"></div>
+              <div class="visual-orb orb-1"></div>
+              <div class="visual-orb orb-2"></div>
+              <div class="visual-grid"></div>
+              <span class="genre-tag">{game.tag}</span>
+              <div class="visual-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <circle cx="12" cy="12" r="10"/>
                   <polyline points="12 6 12 12 16 14"/>
                 </svg>
-              )}
+              </div>
+            </div>
+            <div class="game-info">
+              <div class="game-meta">
+                <h2 class="game-title">{game.title}</h2>
+                <span class="status-soon">Soon</span>
+              </div>
+              <p class="game-desc">{game.description}</p>
             </div>
           </div>
-          <div class="game-info">
-            <h2 class="game-title">{game.title}</h2>
-            <p class="game-desc">{game.description}</p>
-            <span class="game-status">
-              {game.status === 'playable' ? (
-                <span class="status-playable">
-                  <span class="status-dot"></span>
-                  Play Now
-                </span>
-              ) : (
-                <span class="status-soon">Coming Soon</span>
-              )}
-            </span>
-          </div>
-        </a>
+        )
       ))}
     </main>
 
     <footer class="footer">
       <a href="https://shvnk.in" class="back-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="back-arrow">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="back-arrow">
           <line x1="19" y1="12" x2="5" y2="12"/>
           <polyline points="12 19 5 12 12 5"/>
         </svg>
-        <span>Back to shvnk.in</span>
+        <span>shvnk.in</span>
       </a>
     </footer>
   </div>
 </Layout>
 
 <style>
+  /* ── Layout ─────────────────────────────────────── */
   .container {
     position: relative;
     z-index: 1;
@@ -109,9 +142,10 @@ const games = [
     flex-direction: column;
   }
 
+  /* ── Header ─────────────────────────────────────── */
   .header {
-    margin-bottom: 4rem;
-    animation: fadeIn 0.6s var(--ease-out-expo) forwards;
+    margin-bottom: 3.5rem;
+    animation: fadeUp 0.6s var(--ease-out-expo) forwards;
   }
 
   .brand {
@@ -140,194 +174,260 @@ const games = [
     font-size: clamp(3rem, 8vw, 4.5rem);
     font-weight: 400;
     line-height: 1;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.03em;
     color: var(--color-text);
   }
 
   .tagline {
-    margin-top: 1rem;
+    margin-top: 0.875rem;
     font-size: 0.9375rem;
     color: var(--color-text-muted);
-    letter-spacing: 0.02em;
+    letter-spacing: 0.01em;
   }
 
+  /* ── Grid ───────────────────────────────────────── */
   .games-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 1.5rem;
+    gap: 1.25rem;
     flex: 1;
   }
 
-  /* ---- Card ---- */
+  /* ── Card ───────────────────────────────────────── */
   .game-card {
     display: block;
-    background: var(--accent);
-    border-radius: 1.25rem;
+    border-radius: 1.125rem;
     overflow: hidden;
-    animation: slideUp 0.7s var(--ease-out-expo) var(--delay) forwards;
-    opacity: 0;
-    transform: translateY(24px);
+    animation: fadeUp 0.7s var(--ease-out-expo) var(--delay) both;
     cursor: pointer;
-    transition: transform 0.4s var(--ease-out-expo), 
-                box-shadow 0.4s var(--ease-out-expo);
-    box-shadow: 
-      0 2px 8px -2px color-mix(in srgb, var(--accent) 25%, transparent),
-      0 8px 24px -8px color-mix(in srgb, var(--accent) 15%, transparent);
-  }
+    transition:
+      transform 0.35s var(--ease-out-expo),
+      box-shadow 0.35s var(--ease-out-expo);
 
-  .game-card:hover:not(.coming-soon) {
-    transform: translateY(-6px) scale(1.02);
-    box-shadow: 
-      0 8px 20px -4px color-mix(in srgb, var(--accent) 35%, transparent),
-      0 20px 44px -12px color-mix(in srgb, var(--accent) 25%, transparent);
-  }
+    /* Crisp inset border via box-shadow so it doesn't affect layout */
+    box-shadow:
+      inset 0 0 0 1px rgba(255,255,255,0.08),
+      0 2px 12px -4px color-mix(in srgb, var(--accent) 20%, transparent),
+      0 8px 32px -8px color-mix(in srgb, var(--accent) 12%, transparent);
 
-  .game-card:active:not(.coming-soon) {
-    transform: translateY(-2px) scale(0.99);
-    transition-duration: 0.1s;
+    background: white;
   }
 
   .game-card.coming-soon {
     cursor: default;
-    opacity: 0;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    box-shadow: none;
+    background: var(--color-surface, #fafafa);
+    box-shadow:
+      inset 0 0 0 1px var(--color-border, #e5e7eb);
   }
 
-  .game-card.coming-soon:hover {
-    box-shadow: none;
+  .game-card:hover:not(.coming-soon) {
+    transform: translateY(-5px) scale(1.015);
+    box-shadow:
+      inset 0 0 0 1px rgba(255,255,255,0.12),
+      0 8px 24px -4px color-mix(in srgb, var(--accent) 30%, transparent),
+      0 20px 48px -12px color-mix(in srgb, var(--accent) 20%, transparent);
   }
 
-  /* ---- Visual area ---- */
+  .game-card:active:not(.coming-soon) {
+    transform: translateY(-2px) scale(1.005);
+    transition-duration: 0.1s;
+  }
+
+  /* ── Visual area ────────────────────────────────── */
   .game-visual {
     aspect-ratio: 16/9;
-    background: linear-gradient(
-      160deg,
-      color-mix(in srgb, var(--accent) 100%, black 0%) 0%,
-      var(--accent-dark) 100%
-    );
+    position: relative;
+    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
-    position: relative;
-    overflow: hidden;
   }
 
-  .game-card.coming-soon .game-visual {
-    background: linear-gradient(160deg, var(--accent-light) 0%, var(--color-surface) 100%);
-  }
-
-  .visual-pattern {
+  /* Solid accent fill for playable; muted for coming-soon */
+  .visual-bg {
     position: absolute;
     inset: 0;
-    background:
-      radial-gradient(circle at 20% 80%, rgba(255,255,255, 0.12) 0%, transparent 50%),
-      radial-gradient(circle at 80% 20%, rgba(255,255,255, 0.08) 0%, transparent 50%);
+    background: var(--accent);
+    opacity: 1;
+  }
+
+  .coming-soon .visual-bg {
+    background: color-mix(in srgb, var(--accent) 8%, var(--color-surface, #fafafa));
+  }
+
+  /* Two large radial orbs for depth */
+  .visual-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(40px);
     pointer-events: none;
   }
 
+  .orb-1 {
+    width: 55%;
+    aspect-ratio: 1;
+    top: -20%;
+    left: -10%;
+    background: rgba(255,255,255, 0.22);
+  }
+
+  .orb-2 {
+    width: 45%;
+    aspect-ratio: 1;
+    bottom: -20%;
+    right: -5%;
+    background: color-mix(in srgb, var(--accent-dark) 60%, black);
+    opacity: 0.6;
+  }
+
+  .coming-soon .orb-1,
+  .coming-soon .orb-2 {
+    display: none;
+  }
+
+  /* Fine dot grid overlay */
+  .visual-grid {
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle, rgba(255,255,255,0.18) 1px, transparent 1px);
+    background-size: 20px 20px;
+    pointer-events: none;
+  }
+
+  .coming-soon .visual-grid {
+    background-image: radial-gradient(circle, color-mix(in srgb, var(--accent) 25%, transparent) 1px, transparent 1px);
+  }
+
+  /* Diagonal shine on hover */
   .visual-shine {
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, transparent 40%, rgba(255,255,255,0.2) 50%, transparent 60%);
-    opacity: 0;
-    transform: translateX(-100%);
+    background: linear-gradient(
+      120deg,
+      transparent 30%,
+      rgba(255,255,255,0.18) 50%,
+      transparent 70%
+    );
+    transform: translateX(-120%);
     pointer-events: none;
   }
 
   .game-card:hover:not(.coming-soon) .visual-shine {
-    animation: shine 0.8s var(--ease-out-expo);
+    animation: shine 0.65s var(--ease-out-expo);
   }
 
   @keyframes shine {
-    0% { transform: translateX(-100%); opacity: 1; }
-    100% { transform: translateX(100%); opacity: 0; }
+    from { transform: translateX(-120%); }
+    to   { transform: translateX(120%); }
   }
 
-  .visual-icon {
-    width: 4rem;
-    height: 4rem;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.2);
+  /* Genre pill — top-left */
+  .genre-tag {
+    position: absolute;
+    top: 0.875rem;
+    left: 0.875rem;
+    z-index: 2;
+    font-size: 0.625rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 0.3rem 0.65rem;
+    border-radius: 2rem;
+    background: rgba(255,255,255,0.18);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.22);
+  }
+
+  .coming-soon .genre-tag {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+
+  /* Center play / clock icon */
+  .visual-icon {
+    position: relative;
+    z-index: 2;
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.18);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.28);
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
-    transition: all 0.4s var(--ease-out-expo);
-    position: relative;
-    z-index: 1;
+    transition: transform 0.35s var(--ease-out-expo), background 0.3s;
   }
 
   .playable .visual-icon {
-    animation: float 3s ease-in-out infinite;
+    animation: float 3.5s ease-in-out infinite;
   }
 
   .game-card:hover:not(.coming-soon) .visual-icon {
-    background: rgba(255, 255, 255, 0.35);
-    transform: scale(1.1);
+    background: rgba(255,255,255,0.3);
+    transform: scale(1.12);
+    animation-play-state: paused;
   }
 
-  .game-card.coming-soon .visual-icon {
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  .coming-soon .visual-icon {
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 22%, transparent);
     color: var(--accent);
-    opacity: 0.6;
+    opacity: 0.75;
   }
 
   @keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-6px); }
+    0%, 100% { transform: translateY(0);  }
+    50%       { transform: translateY(-5px); }
   }
 
-  /* ---- Info area ---- */
+  /* ── Info strip ─────────────────────────────────── */
   .game-info {
-    padding: 1.25rem 1.5rem 1.5rem;
-    background: white;
+    padding: 1.125rem 1.375rem 1.375rem;
   }
 
-  .game-card.coming-soon .game-info {
-    background: var(--color-surface);
+  /* Title row */
+  .game-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.375rem;
   }
 
   .game-title {
     font-family: var(--font-display);
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     font-weight: 500;
     color: var(--color-text);
-    margin-bottom: 0.375rem;
-    transition: color 0.25s var(--ease-out-expo);
+    letter-spacing: -0.01em;
+    transition: color 0.2s;
   }
 
   .game-card:hover:not(.coming-soon) .game-title {
     color: var(--accent-dark);
   }
 
-  .game-desc {
-    font-size: 0.875rem;
-    color: var(--color-text-muted);
-    line-height: 1.5;
-    margin-bottom: 1rem;
-  }
-
-  .game-status {
-    display: inline-block;
-  }
-
+  /* Status badges */
   .status-playable {
+    flex-shrink: 0;
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
-    font-size: 0.6875rem;
-    font-weight: 600;
+    gap: 0.35rem;
+    font-size: 0.625rem;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--accent-dark);
     background: var(--accent-light);
-    padding: 0.35rem 0.75rem;
+    padding: 0.28rem 0.6rem;
     border-radius: 2rem;
-    transition: all 0.25s var(--ease-out-expo);
+    transition: background 0.25s, color 0.25s;
   }
 
   .game-card:hover:not(.coming-soon) .status-playable {
@@ -336,46 +436,84 @@ const games = [
   }
 
   .status-dot {
-    width: 6px;
-    height: 6px;
+    width: 5px;
+    height: 5px;
     border-radius: 50%;
-    background: var(--accent);
+    background: currentColor;
     animation: pulse 2s ease-in-out infinite;
-  }
-
-  .game-card:hover:not(.coming-soon) .status-dot {
-    background: white;
   }
 
   @keyframes pulse {
     0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+    50%       { opacity: 0.35; }
   }
 
   .status-soon {
-    font-size: 0.6875rem;
-    font-weight: 600;
+    flex-shrink: 0;
+    font-size: 0.625rem;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    color: var(--color-text-muted);
+    color: var(--color-text-muted, #94a3b8);
+    background: var(--color-border, #f1f5f9);
+    padding: 0.28rem 0.6rem;
+    border-radius: 2rem;
   }
 
-  /* ---- Footer ---- */
+  /* Description */
+  .game-desc {
+    font-size: 0.8125rem;
+    color: var(--color-text-muted);
+    line-height: 1.55;
+    margin-bottom: 0.875rem;
+  }
+
+  .coming-soon .game-desc {
+    margin-bottom: 0;
+  }
+
+  /* CTA row */
+  .play-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--accent-dark);
+    transition: gap 0.25s var(--ease-out-expo), color 0.2s;
+  }
+
+  .game-card:hover .play-cta {
+    gap: 0.55rem;
+    color: var(--accent);
+  }
+
+  .cta-arrow {
+    transition: transform 0.3s var(--ease-out-expo);
+  }
+
+  .game-card:hover .cta-arrow {
+    transform: translateX(3px);
+  }
+
+  /* ── Footer ─────────────────────────────────────── */
   .footer {
     margin-top: 3.5rem;
     padding-top: 1.5rem;
     border-top: 1px solid var(--color-border);
-    animation: fadeIn 0.6s var(--ease-out-expo) 0.4s forwards;
-    opacity: 0;
+    animation: fadeUp 0.6s var(--ease-out-expo) 0.5s both;
   }
 
   .back-link {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
     color: var(--color-text-muted);
-    transition: color 0.25s var(--ease-out-expo);
+    letter-spacing: 0.03em;
+    transition: color 0.2s;
   }
 
   .back-link:hover {
@@ -390,16 +528,100 @@ const games = [
     transform: translateX(-3px);
   }
 
-  @keyframes slideUp {
+  /* ── Keyframes ──────────────────────────────────── */
+  @keyframes fadeUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
     to {
       opacity: 1;
       transform: translateY(0);
     }
   }
 
-  @keyframes fadeIn {
-    to {
-      opacity: 1;
+  /* ── Mobile Responsive ───────────────────────────── */
+  @media (max-width: 640px) {
+    .container {
+      padding: 2rem 1rem;
+      padding-bottom: calc(2rem + env(safe-area-inset-bottom));
+    }
+
+    .header {
+      margin-bottom: 2.5rem;
+    }
+
+    .brand-title {
+      font-size: clamp(2.25rem, 12vw, 3rem);
+    }
+
+    .tagline {
+      font-size: 0.875rem;
+    }
+
+    .games-grid {
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+
+    .game-card {
+      border-radius: 0.875rem;
+    }
+
+    .game-visual {
+      aspect-ratio: 2/1;
+    }
+
+    .game-info {
+      padding: 1rem 1.125rem;
+    }
+
+    .game-meta {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
+    .game-title {
+      font-size: 1.25rem;
+    }
+
+    .game-desc {
+      font-size: 0.8125rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .play-cta {
+      font-size: 0.8125rem;
+      padding: 0.625rem 0;
+      min-height: 44px;
+    }
+
+    .footer {
+      margin-top: 2.5rem;
+      padding-top: 1.25rem;
+    }
+
+    .back-link {
+      min-height: 44px;
+      padding: 0.5rem 0;
+      display: inline-flex;
+      align-items: center;
+    }
+  }
+
+  @media (max-width: 380px) {
+    .container {
+      padding: 1.5rem 0.875rem;
+      padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
+    }
+
+    .games-grid {
+      gap: 0.875rem;
+    }
+
+    .game-info {
+      padding: 0.875rem 1rem;
     }
   }
 </style>

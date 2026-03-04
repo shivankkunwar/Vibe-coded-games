@@ -3,14 +3,16 @@ import Layout from '../../layouts/Layout.astro';
 
 export function getStaticPaths() {
   return [
-    { params: { gameId: 'neon-blitz' } },
+    { params: { gameId: 'game-2' } },
+    { params: { gameId: 'game-3' } },
   ];
 }
 
 const { gameId } = Astro.params;
 
 const games: Record<string, { title: string; color: string }> = {
-  'neon-blitz': { title: 'Neon Blitz', color: '#f59e0b' },
+  'game-2': { title: 'Coming Soon', color: '#06B6D4' },
+  'game-3': { title: 'Coming Soon', color: '#A855F7' },
 };
 
 const game = games[gameId || ''];
@@ -28,300 +30,143 @@ if (!game) {
         <span class="back-text">Exit</span>
       </a>
       <h1 class="game-title">{game.title}</h1>
-      <div class="score-display">
-        <span class="score-label">Score</span>
-        <span class="score-value" id="score">0</span>
+      <div class="header-right">
+        <button class="fullscreen-btn" id="fullscreen-btn" aria-label="Toggle fullscreen">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+          </svg>
+        </button>
+        <div class="score-display">
+          <span class="score-label">Score</span>
+          <span class="score-value" id="score">0</span>
+        </div>
       </div>
     </header>
     
-    <div class="game-wrapper" transition:name={`game-visual-${gameId}`}>
-      <div id="game-canvas" class="game-canvas"></div>
-      <div class="game-overlay" id="game-overlay">
-        <div class="overlay-content">
-          <h2 class="overlay-title" id="overlay-title">Neon Blitz</h2>
-          <p class="overlay-subtitle" id="overlay-subtitle">Press SPACE or TAP to start</p>
-          <button class="start-btn" id="start-btn">Start Game</button>
+    <div class="game-wrapper" id="game-wrapper" transition:name={`game-visual-${gameId}`}>
+      <div class="game-placeholder">
+        <div class="placeholder-icon">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
         </div>
+        <h3 class="placeholder-title">{game.title}</h3>
+        <p class="placeholder-subtitle">Coming Soon</p>
+        <p class="placeholder-desc">This game is under development. Check back soon!</p>
       </div>
-      <div class="confetti-container" id="confetti"></div>
     </div>
     
     <div class="controls-hint">
       <span>Arrow Keys / WASD to move</span>
-      <span>•</span>
-      <span>Collect orbs, avoid red</span>
+      <span class="hint-sep">•</span>
+      <span>Explore the lab, find clues</span>
+    </div>
+
+    <div class="d-pad" id="d-pad">
+      <button class="d-btn d-up" data-dir="up" aria-label="Move up">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l-8 8h5v8h6v-8h5z"/></svg>
+      </button>
+      <button class="d-btn d-left" data-dir="left" aria-label="Move left">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M4 12l8-8v5h8v6h-8v5z"/></svg>
+      </button>
+      <button class="d-btn d-right" data-dir="right" aria-label="Move right">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M20 12l-8 8v-5h-8v-6h8v-5z"/></svg>
+      </button>
+      <button class="d-btn d-down" data-dir="down" aria-label="Move down">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 20l8-8h-5v-8h-6v8h-5z"/></svg>
+      </button>
+    </div>
+
+    <div class="rotate-prompt" id="rotate-prompt">
+      <div class="rotate-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="2" y="4" width="20" height="16" rx="2" transform="rotate(90 12 12)"/>
+          <path d="M12 8v8M8 12l4-4 4 4"/>
+        </svg>
+      </div>
+      <p>Rotate your device to landscape</p>
     </div>
   </div>
 </Layout>
 
 <script>
-  import Phaser from 'phaser';
+  // Fullscreen toggle
+  const fullscreenBtn = document.getElementById('fullscreen-btn');
+  const gameWrapper = document.getElementById('game-wrapper');
 
-  function createConfetti() {
-    const container = document.getElementById('confetti');
-    if (!container) return;
-    
-    container.innerHTML = '';
-    const colors = ['#f59e0b', '#06b6d4', '#10b981', '#f43f5e', '#8b5cf6'];
-    
-    for (let i = 0; i < 50; i++) {
-      const confetto = document.createElement('div');
-      confetto.className = 'confetto';
-      confetto.style.setProperty('--x', `${Math.random() * 100 - 50}%`);
-      confetto.style.setProperty('--r', `${Math.random() * 360}deg}`);
-      confetto.style.setProperty('--d', `${Math.random() * 1 + 0.5}s`);
-      confetto.style.setProperty('--c', colors[Math.floor(Math.random() * colors.length)]);
-      container.appendChild(confetto);
+  fullscreenBtn?.addEventListener('click', async () => {
+    if (!document.fullscreenElement) {
+      await gameWrapper?.requestFullscreen();
+    } else {
+      await document.exitFullscreen();
     }
-    
-    setTimeout(() => container.innerHTML = '', 2000);
-  }
+  });
 
-  class NeonBlitz extends Phaser.Scene {
-    constructor() {
-      super({ key: 'NeonBlitz' });
-      this.score = 0;
-      this.player = null;
-      this.cursors = null;
-      this.wasd = null;
-      this.orbs = null;
-      this.enemies = null;
-      this.isGameOver = false;
-      this.isPlaying = false;
-      this.spawnTimer = 0;
-    }
-
-    create() {
-      this.cameras.main.setBackgroundColor('#0a0a0a');
-      
-      this.add.grid(400, 300, 800, 600, 40, 40, 0x141414, 1, 0x1a1a1a, 0.3);
-      
-      this.orbs = this.physics.add.group();
-      this.enemies = this.physics.add.group();
-      
-      this.player = this.add.circle(400, 300, 16, 0xf59e0b);
-      this.physics.add.existing(this.player);
-      
-      this.cursors = this.input.keyboard.createCursorKeys();
-      this.wasd = this.input.keyboard.addKeys({
-        up: Phaser.Input.Keyboard.KeyCodes.W,
-        down: Phaser.Input.Keyboard.KeyCodes.S,
-        left: Phaser.Input.Keyboard.KeyCodes.A,
-        right: Phaser.Input.Keyboard.KeyCodes.D
-      });
-      
-      this.physics.add.overlap(this.player, this.orbs, this.collectOrb, null, this);
-      this.physics.add.overlap(this.player, this.enemies, this.hitEnemy, null, this);
-      
-      this.input.keyboard.once('keydown-SPACE', this.startGame, this);
-      this.input.on('pointerdown', this.startGame, this);
-      
-      this.showStartScreen();
-    }
-
-    showStartScreen() {
-      document.getElementById('game-overlay')?.classList.add('visible');
-    }
-
-    startGame() {
-      if (this.isPlaying) return;
-      
-      this.isPlaying = true;
-      this.isGameOver = false;
-      this.score = 0;
-      this.updateScore();
-      
-      this.player.body.setVelocity(0);
-      this.player.setPosition(400, 300);
-      
-      document.getElementById('game-overlay')?.classList.remove('visible');
-    }
-
-    update(time: number, delta: number) {
-      if (!this.isPlaying || this.isGameOver) return;
-
-      const speed = 300;
-      const velocity = this.player.body.velocity;
-      
-      velocity.set(0);
-      
-      if (this.cursors.left.isDown || this.wasd.left.isDown) velocity.x = -speed;
-      if (this.cursors.right.isDown || this.wasd.right.isDown) velocity.x = speed;
-      if (this.cursors.up.isDown || this.wasd.up.isDown) velocity.y = -speed;
-      if (this.cursors.down.isDown || this.wasd.down.isDown) velocity.y = speed;
-      
-      if (velocity.x !== 0 && velocity.y !== 0) {
-        velocity.x *= 0.707;
-        velocity.y *= 0.707;
-      }
-      
-      this.player.x = Phaser.Math.Clamp(this.player.x, 20, 780);
-      this.player.y = Phaser.Math.Clamp(this.player.y, 20, 580);
-      
-      this.spawnTimer += delta;
-      if (this.spawnTimer > 800) {
-        this.spawnTimer = 0;
-        this.spawnOrb();
-        
-        if (this.score > 10) this.spawnEnemy();
-      }
-      
-      this.orbs.children.each((orb: any) => {
-        if (orb.active) {
-          const angle = time * 0.002 + orb.orbIndex;
-          orb.setScale(1 + Math.sin(angle) * 0.2);
+  document.addEventListener('fullscreenchange', () => {
+    if (fullscreenBtn) {
+      const icon = fullscreenBtn.querySelector('svg');
+      if (icon) {
+        if (document.fullscreenElement) {
+          icon.innerHTML = '<path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>';
+        } else {
+          icon.innerHTML = '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>';
         }
-      });
-    }
-
-    spawnOrb() {
-      const x = Phaser.Math.Between(40, 760);
-      const y = Phaser.Math.Between(40, 560);
-      const orb = this.add.circle(x, y, 10, 0x06b6d4);
-      this.physics.add.existing(orb);
-      (orb as any).orbIndex = Math.random() * Math.PI * 2;
-      this.orbs.add(orb);
-      
-      this.tweens.add({
-        targets: orb,
-        scale: { from: 0, to: 1 },
-        duration: 200,
-        ease: 'Back.easeOut'
-      });
-    }
-
-    spawnEnemy() {
-      const x = Phaser.Math.Between(40, 760);
-      const y = Phaser.Math.Between(40, 560);
-      const enemy = this.add.circle(x, y, 14, 0xef4444);
-      this.physics.add.existing(enemy);
-      
-      const angle = Phaser.Math.Angle.Between(x, y, this.player.x, this.player.y);
-      const speed = Phaser.Math.Between(80, 150);
-      (enemy.body as any).setVelocity(
-        Math.cos(angle) * speed,
-        Math.sin(angle) * speed
-      );
-      
-      this.enemies.add(enemy);
-      
-      this.tweens.add({
-        targets: enemy,
-        scale: { from: 0, to: 1 },
-        duration: 200,
-        ease: 'Back.easeOut'
-      });
-    }
-
-    collectOrb(player: any, orb: any) {
-      orb.destroy();
-      this.score += 10;
-      this.updateScore();
-      
-      this.tweens.add({
-        targets: player,
-        scale: { from: 1.3, to: 1 },
-        duration: 150,
-        ease: 'Quad.easeOut'
-      });
-    }
-
-    hitEnemy(player: any, enemy: any) {
-      this.gameOver();
-    }
-
-    gameOver() {
-      this.isGameOver = true;
-      this.isPlaying = false;
-      
-      this.physics.pause();
-      
-      const overlay = document.getElementById('game-overlay');
-      const title = document.getElementById('overlay-title');
-      const subtitle = document.getElementById('overlay-subtitle');
-      const btn = document.getElementById('start-btn');
-      
-      if (title) title.textContent = this.score >= 100 ? 'Amazing!' : 'Game Over';
-      if (subtitle) subtitle.textContent = `Final Score: ${this.score}`;
-      if (btn) btn.textContent = 'Play Again';
-      
-      if (this.score >= 50) {
-        createConfetti();
-      }
-      
-      overlay?.classList.add('visible');
-      
-      this.tweens.add({
-        targets: this.player,
-        alpha: 0.3,
-        duration: 300
-      });
-    }
-
-    updateScore() {
-      const scoreEl = document.getElementById('score');
-      if (scoreEl) {
-        const targetScore = this.score;
-        const currentScore = parseInt(scoreEl.textContent || '0');
-        if (targetScore === currentScore) return;
-        
-        const duration = 300;
-        const startTime = performance.now();
-        const animate = (currentTime: number) => {
-          const elapsed = currentTime - startTime;
-          const progress = Math.min(elapsed / duration, 1);
-          const eased = 1 - Math.pow(1 - progress, 3);
-          const current = Math.round(currentScore + (targetScore - currentScore) * eased);
-          scoreEl.textContent = current.toString();
-          
-          if (progress < 1) {
-            requestAnimationFrame(animate);
-          }
-        };
-        requestAnimationFrame(animate);
       }
     }
+  });
 
-    restart() {
-      this.isGameOver = false;
-      this.score = 0;
-      this.updateScore();
-      
-      this.orbs.clear(true, true);
-      this.enemies.clear(true, true);
-      
-      this.player.setPosition(400, 300);
-      this.player.setAlpha(1);
-      
-      this.physics.resume();
-    }
-  }
-
-  const config: Phaser.Types.Core.GameConfig = {
-    type: Phaser.AUTO,
-    parent: 'game-canvas',
-    width: 800,
-    height: 600,
-    backgroundColor: '#0a0a0a',
-    physics: {
-      default: 'arcade',
-      arcade: {
-        gravity: { y: 0 },
-        debug: false
-      }
-    },
-    scene: NeonBlitz
+  // D-pad controls
+  const dPad = document.getElementById('d-pad');
+  const dButtons = dPad?.querySelectorAll('.d-btn');
+  const virtualKeys: Record<string, string> = {
+    up: 'UP',
+    down: 'DOWN',
+    left: 'LEFT',
+    right: 'RIGHT'
   };
 
-  const game = new Phaser.Game(config);
+  function simulateKey(dir: string, pressed: boolean) {
+    const event = new KeyboardEvent(pressed ? 'keydown' : 'keyup', {
+      key: virtualKeys[dir],
+      code: `Arrow${virtualKeys[dir]}`,
+      bubbles: true
+    });
+    document.dispatchEvent(event);
+  }
 
-  document.getElementById('start-btn')?.addEventListener('click', () => {
-    const scene = game.scene.getScene('NeonBlitz') as NeonBlitz;
-    if (scene.isGameOver) {
-      scene.restart();
-    }
-    scene.startGame();
+  dButtons?.forEach(btn => {
+    const dir = btn.getAttribute('data-dir');
+    if (!dir) return;
+
+    btn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      simulateKey(dir, true);
+      (btn as HTMLElement).style.transform = 'scale(0.9)';
+    });
+
+    btn.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      simulateKey(dir, false);
+      (btn as HTMLElement).style.transform = '';
+    });
+
+    btn.addEventListener('mousedown', () => simulateKey(dir, true));
+    btn.addEventListener('mouseup', () => simulateKey(dir, false));
+    btn.addEventListener('mouseleave', () => simulateKey(dir, false));
   });
+
+  // Landscape detection
+  const rotatePrompt = document.getElementById('rotate-prompt');
+
+  function checkOrientation() {
+    if (rotatePrompt) {
+      rotatePrompt.style.display = window.innerWidth < 768 && window.innerHeight > window.innerWidth ? 'flex' : 'none';
+    }
+  }
+
+  window.addEventListener('resize', checkOrientation);
+  checkOrientation();
 </script>
 
 <style>
@@ -380,6 +225,35 @@ if (!game) {
     font-weight: 400;
   }
 
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .fullscreen-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition: all 0.3s var(--ease-out-expo);
+  }
+
+  .fullscreen-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+  }
+
+  .fullscreen-btn:active {
+    transform: scale(0.95);
+  }
+
   .score-display {
     display: flex;
     flex-direction: column;
@@ -409,7 +283,50 @@ if (!game) {
     border-radius: 1rem;
     overflow: hidden;
     border: 1px solid var(--color-border);
-    background: #0a0a0a;
+    background: linear-gradient(135deg, #1a1a2e 0%, #0a0a0a 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .game-placeholder {
+    text-align: center;
+    color: white;
+    padding: 2rem;
+  }
+
+  .placeholder-icon {
+    margin-bottom: 1.5rem;
+    opacity: 0.6;
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { opacity: 0.4; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.05); }
+  }
+
+  .placeholder-title {
+    font-family: var(--font-display);
+    font-size: 1.75rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: var(--color-accent, #06B6D4);
+  }
+
+  .placeholder-subtitle {
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 1rem;
+  }
+
+  .placeholder-desc {
+    font-size: 0.875rem;
+    color: rgba(255, 255, 255, 0.4);
+    max-width: 280px;
+    margin: 0 auto;
   }
 
   .game-canvas {
@@ -517,6 +434,175 @@ if (!game) {
     to {
       transform: translate(calc(-50% + var(--x)), 200px) rotate(calc(var(--r) + 720deg));
       opacity: 0;
+    }
+  }
+
+  /* D-Pad for mobile */
+  .d-pad {
+    display: none;
+    position: fixed;
+    bottom: 2rem;
+    left: 2rem;
+    width: 140px;
+    height: 140px;
+    z-index: 100;
+  }
+
+  .d-btn {
+    position: absolute;
+    width: 56px;
+    height: 56px;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .d-btn:active {
+    transform: scale(0.9);
+    background: rgba(255, 255, 255, 0.3);
+  }
+
+  .d-up { top: 0; left: 50%; transform: translateX(-50%); }
+  .d-down { bottom: 0; left: 50%; transform: translateX(-50%); }
+  .d-left { top: 50%; left: 0; transform: translateY(-50%); }
+  .d-right { top: 50%; right: 0; transform: translateY(-50%); }
+
+  /* Rotate prompt */
+  .rotate-prompt {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 10, 10, 0.95);
+    z-index: 200;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    color: white;
+  }
+
+  .rotate-icon {
+    animation: rotate-hint 1.5s ease-in-out infinite;
+  }
+
+  @keyframes rotate-hint {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(90deg); }
+  }
+
+  .rotate-prompt p {
+    font-size: 1rem;
+    opacity: 0.8;
+  }
+
+  /* Mobile styles */
+  @media (max-width: 768px) {
+    .d-pad {
+      display: grid;
+      grid-template-areas:
+        ". up ."
+        "left . right"
+        ". down .";
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 4px;
+    }
+
+    .d-up { grid-area: up; }
+    .d-down { grid-area: down; }
+    .d-left { grid-area: left; }
+    .d-right { grid-area: right; }
+
+    .game-wrapper {
+      touch-action: none;
+    }
+
+    .controls-hint {
+      display: none;
+    }
+  }
+
+  @media (max-width: 768px) and (orientation: portrait) {
+    .rotate-prompt {
+      display: flex;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .game-container {
+      padding: 1rem;
+      padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+    }
+
+    .game-header {
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    .back-btn {
+      padding: 0.5rem 0.75rem;
+      font-size: 0.8125rem;
+    }
+
+    .game-title {
+      font-size: 1.25rem;
+      order: 3;
+      width: 100%;
+      text-align: center;
+      padding-top: 0.5rem;
+      border-top: 1px solid var(--color-border);
+      margin-top: 0.5rem;
+    }
+
+    .header-right {
+      gap: 0.75rem;
+    }
+
+    .fullscreen-btn {
+      width: 2.25rem;
+      height: 2.25rem;
+    }
+
+    .score-value {
+      font-size: 1.25rem;
+    }
+  }
+
+  /* Fullscreen mode */
+  .game-container:fullscreen {
+    padding: 0;
+    background: #0a0a0a;
+  }
+
+  .game-container:fullscreen .game-header {
+    display: none;
+  }
+
+  .game-container:fullscreen .game-wrapper {
+    max-width: none;
+    width: 100vw;
+    height: 100vh;
+    aspect-ratio: unset;
+    border-radius: 0;
+    border: none;
+  }
+
+  .game-container:fullscreen .controls-hint {
+    display: none;
+  }
+
+  @media (max-width: 768px) {
+    .game-container:fullscreen .d-pad {
+      display: grid;
     }
   }
 </style>

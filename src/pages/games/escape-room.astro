@@ -1,0 +1,1399 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="The Forgotten Lab 3D | Escape Room">
+  <main class="game-container">
+    <canvas id="game-canvas"></canvas>
+
+    <div id="ui-layer">
+      <div id="crosshair"></div>
+      <div id="screen-flash"></div>
+
+      <header class="game-header">
+        <div class="header-left-actions">
+          <a href="/" class="back-btn" aria-label="Back to games">Exit</a>
+          <button id="quick-hint-btn" class="quick-hint-btn" type="button">Hint</button>
+        </div>
+        <div class="header-center">
+          <div class="timer" id="timer-display">05:00</div>
+          <div class="score-display">Score <span id="score-value">0</span></div>
+          <div class="best-display">Best <span id="best-score-value">---</span></div>
+        </div>
+        <div class="hints-display">Hints <span id="hints-value">3</span></div>
+      </header>
+
+      <div class="mission-shell" id="mission-shell">
+        <button class="mission-fab" id="mission-fab" type="button" aria-expanded="false" aria-label="Open missions">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M9 21h6v-1H9v1zm3-20C8.14 1 5 4.14 5 8c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-3.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7zm2 11.7V16h-4v-3.3l-.4-.28C8.09 11.37 7 9.76 7 8c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.76-1.09 3.37-2.6 4.42l-.4.28z"/>
+          </svg>
+        </button>
+        <div class="objective-panel" id="objective-panel">
+          <div class="objective-top">
+            <span class="objective-label">Objective</span>
+          </div>
+          <div class="objective-content" id="objective-content">
+            <p id="objective-text">Search the main lab and discover the hidden code.</p>
+            <div class="objective-meta">
+              <div class="run-meta-group">
+                <span class="run-seed">Run Seed <strong id="run-seed-value">00000000</strong></span>
+                <span class="run-mode">Mode <strong id="run-mode-value">Story Ops</strong></span>
+              </div>
+              <button class="hint-btn" id="use-hint-btn" type="button">Use Hint (H)</button>
+            </div>
+            <ol class="mission-list">
+              <li id="mission-step-1" class="pending"><span class="mission-marker">..</span> Get UV clue</li>
+              <li id="mission-step-2" class="pending"><span class="mission-marker">..</span> Route mirror beam</li>
+              <li id="mission-step-3" class="pending"><span class="mission-marker">..</span> Unlock safe + card</li>
+              <li id="mission-step-4" class="pending"><span class="mission-marker">..</span> Power door + escape</li>
+            </ol>
+            <div class="bonus-objective-shell">
+              <span class="bonus-objective-label">Ops Bonus Objectives</span>
+              <ol class="bonus-list">
+                <li id="bonus-step-1" class="pending"><span class="mission-marker">..</span> No hints used</li>
+                <li id="bonus-step-2" class="pending"><span class="mission-marker">..</span> No laser contacts</li>
+                <li id="bonus-step-3" class="pending"><span class="mission-marker">..</span> Escape with 2:00+ left</li>
+                <li id="bonus-step-4" class="pending"><span class="mission-marker">..</span> Clean puzzle solve</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="intro-modal" class="modal-overlay active">
+        <div class="modal-window">
+          <h2>The Forgotten Lab 3D</h2>
+          <p>You have 5 minutes to escape.</p>
+          <ul>
+            <li>WASD to move</li>
+            <li>Mouse to look</li>
+            <li>Left click to interact</li>
+          </ul>
+          <div class="pilot-shell">
+            <label class="pilot-label" for="pilot-name-input">Pilot Callsign</label>
+            <input id="pilot-name-input" maxlength="14" value="ANON" placeholder="ANON" />
+          </div>
+          <div class="mode-select-shell">
+            <span class="mode-select-label">Run Mode</span>
+            <div class="mode-option-grid">
+              <label class="mode-option-card">
+                <input type="radio" name="run-mode" value="story" checked />
+                <div>
+                  <strong>Story Ops</strong>
+                  <small>Balanced run with full hint support.</small>
+                </div>
+              </label>
+              <label class="mode-option-card">
+                <input type="radio" name="run-mode" value="hardcore" />
+                <div>
+                  <strong>Hardcore Protocol</strong>
+                  <small>Shorter timer and harsher penalties.</small>
+                </div>
+              </label>
+              <label class="mode-option-card">
+                <input type="radio" name="run-mode" value="daily" />
+                <div>
+                  <strong>Daily Seed</strong>
+                  <small>Shared deterministic challenge seed.</small>
+                </div>
+              </label>
+            </div>
+            <p class="session-champion-line">Session Champion <strong id="session-champion-value">---</strong></p>
+          </div>
+          <div class="loading-bar-container">
+            <div id="loading-bar" class="loading-bar"></div>
+          </div>
+          <p id="loading-text">Loading Systems (0%)</p>
+          <button id="start-btn" class="sys-btn" style="display:none">Start Mission</button>
+        </div>
+      </div>
+
+      <div id="note-modal" class="modal-overlay">
+        <div class="modal-window">
+          <h3>Recovered Note</h3>
+          <p id="note-body">...</p>
+          <button class="sys-btn" data-close-modal>Close</button>
+        </div>
+      </div>
+
+      <div id="keypad-modal" class="modal-overlay">
+        <div class="modal-window">
+          <h3>Storage Access Terminal</h3>
+          <p>Enter 4 digit code</p>
+          <input id="keypad-input" inputmode="numeric" maxlength="4" placeholder="0000" />
+          <p id="keypad-feedback" class="modal-feedback"></p>
+          <div class="modal-actions">
+            <button id="keypad-submit" class="sys-btn">Submit</button>
+            <button class="sys-btn alt" data-close-modal>Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="cipher-modal" class="modal-overlay">
+        <div class="modal-window">
+          <h3>Storage Cipher Console</h3>
+          <p>Decrypt: HARGXV (shift -3)</p>
+          <input id="cipher-input" maxlength="12" placeholder="Enter phrase" />
+          <p id="cipher-feedback" class="modal-feedback"></p>
+          <div class="modal-actions">
+            <button id="cipher-submit" class="sys-btn">Submit</button>
+            <button class="sys-btn alt" data-close-modal>Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="pause-modal" class="modal-overlay">
+        <div class="modal-window">
+          <h3>Paused</h3>
+          <p>Press Resume to continue mission.</p>
+          <div class="modal-actions">
+            <button id="resume-btn" class="sys-btn">Resume</button>
+            <button class="sys-btn alt" data-restart-game>Restart</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="victory-modal" class="modal-overlay">
+        <div class="modal-window">
+          <h3>Escape Complete</h3>
+          <p>You made it out before lockdown.</p>
+          <div class="victory-metrics">
+            <div class="victory-line">Final Score <strong id="victory-score-value">0</strong></div>
+            <div class="victory-line">Rank <strong id="victory-rank-value">C</strong></div>
+            <div class="victory-line">Highest Score <strong id="victory-best-value">---</strong></div>
+            <div class="victory-record-badge" id="victory-record-badge"></div>
+          </div>
+          <div class="victory-bonus-grid">
+            <div>Time Bonus <strong id="victory-time-bonus">+0</strong></div>
+            <div>Hint Discipline <strong id="victory-discipline-bonus">+0</strong></div>
+            <div>Stealth Bonus <strong id="victory-stealth-bonus">+0</strong></div>
+            <div>Solver Efficiency <strong id="victory-efficiency-bonus">+0</strong></div>
+            <div>Momentum Chain <strong id="victory-chain-bonus">+0</strong></div>
+          </div>
+          <div class="modal-actions">
+            <a class="sys-btn" href="/">Return to Hub</a>
+            <button class="sys-btn alt" data-restart-game>Play Again</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="gameover-modal" class="modal-overlay">
+        <div class="modal-window">
+          <h3>Lockdown Triggered</h3>
+          <p>Time is up. Try a faster route.</p>
+          <div class="modal-actions">
+            <button class="sys-btn" data-restart-game>Retry</button>
+            <a class="sys-btn alt" href="/">Exit</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="inventory-bar" id="inventory-bar"></div>
+      <div class="notification-area" id="notification-area"></div>
+
+      <div class="mobile-controls" id="mobile-controls">
+        <div class="move-stick" id="move-stick" aria-label="Movement joystick">
+          <div class="move-stick-ring"></div>
+          <div class="move-stick-thumb" id="move-stick-thumb"></div>
+        </div>
+        <div class="mobile-actions">
+          <button class="action-btn" data-code="Space" type="button">Jump</button>
+          <button class="action-btn" data-code="ShiftLeft" type="button">Sprint</button>
+        </div>
+        <div class="look-zone" id="look-zone"><span class="look-zone-label">Swipe To Look</span></div>
+        <button class="mobile-use-btn" id="mobile-use-btn" type="button">Use</button>
+      </div>
+    </div>
+  </main>
+</Layout>
+
+<style>
+  html,
+  body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #03050a;
+  }
+
+  .game-container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    background: radial-gradient(circle at 10% 20%, #0f1525, #03050a 58%);
+  }
+
+  #game-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  #ui-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    color: #e6edf7;
+  }
+
+  .game-header,
+  .objective-panel,
+  .inventory-bar,
+  .mobile-controls,
+  .back-btn,
+  .modal-window {
+    pointer-events: auto;
+  }
+
+  #crosshair {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 7px;
+    height: 7px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.6);
+    transition: all 0.12s ease;
+    z-index: 20;
+  }
+
+  #crosshair.interactable {
+    width: 12px;
+    height: 12px;
+    border: 2px solid #3ce8ff;
+    background: transparent;
+    box-shadow: 0 0 12px rgba(60, 232, 255, 0.6);
+  }
+
+  #screen-flash {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 90;
+  }
+
+  #screen-flash.flash-green {
+    animation: flash-green 0.35s ease;
+  }
+
+  #screen-flash.flash-red {
+    animation: flash-red 0.35s ease;
+  }
+
+  @keyframes flash-green {
+    from { opacity: 0.35; background: rgba(48, 255, 143, 0.45); }
+    to { opacity: 0; background: rgba(48, 255, 143, 0); }
+  }
+
+  @keyframes flash-red {
+    from { opacity: 0.45; background: rgba(255, 60, 60, 0.45); }
+    to { opacity: 0; background: rgba(255, 60, 60, 0); }
+  }
+
+  .game-header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.2rem;
+    background: linear-gradient(to bottom, rgba(3, 5, 10, 0.92), rgba(3, 5, 10, 0));
+    z-index: 30;
+  }
+
+  .back-btn {
+    text-decoration: none;
+    color: #b9c6db;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 8px;
+    padding: 0.5rem 0.8rem;
+    font-size: 0.9rem;
+    background: rgba(16, 20, 30, 0.7);
+  }
+
+  .header-left-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .quick-hint-btn {
+    border: 1px solid rgba(94, 224, 255, 0.52);
+    background: rgba(50, 153, 190, 0.2);
+    color: #dff9ff;
+    border-radius: 8px;
+    padding: 0.5rem 0.72rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    min-height: 36px;
+    cursor: pointer;
+  }
+
+  .quick-hint-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .header-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+  }
+
+  .timer {
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+  }
+
+  .timer.warning {
+    color: #ffbe4d;
+  }
+
+  .timer.urgent {
+    color: #ff5050;
+  }
+
+  .score-display,
+  .hints-display {
+    font-size: 0.9rem;
+    font-weight: 700;
+    background: rgba(6, 11, 18, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 0.4rem 0.6rem;
+    border-radius: 8px;
+  }
+
+  .best-display {
+    font-size: 0.67rem;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: #9bb0cc;
+  }
+
+  .best-display span {
+    color: #a8f3ff;
+    margin-left: 0.2rem;
+  }
+
+  .mission-shell {
+    position: absolute;
+    top: 5.5rem;
+    left: 1rem;
+    z-index: 25;
+  }
+
+  .mission-fab {
+    display: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    border: 1px solid rgba(92, 219, 255, 0.55);
+    background: rgba(5, 14, 24, 0.78);
+    color: #bfeeff;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .objective-panel {
+    max-width: 340px;
+    border: 1px solid rgba(80, 231, 255, 0.26);
+    background: rgba(7, 13, 22, 0.82);
+    border-radius: 10px;
+    padding: 0.75rem 0.9rem;
+  }
+
+  .objective-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .objective-label {
+    display: block;
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #59d9f6;
+  }
+
+  .objective-content {
+    margin-top: 0.45rem;
+  }
+
+  .objective-panel p {
+    margin: 0;
+    font-size: 0.88rem;
+    color: #d4deed;
+    line-height: 1.35;
+  }
+
+  .objective-meta {
+    margin-top: 0.55rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+  }
+
+  .run-seed {
+    font-size: 0.68rem;
+    color: #8ea1bb;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .run-seed strong {
+    color: #bde8ff;
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+  }
+
+  .run-meta-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.14rem;
+  }
+
+  .run-mode {
+    font-size: 0.63rem;
+    color: #8ea1bb;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .run-mode strong {
+    color: #8df2d5;
+    font-size: 0.71rem;
+    letter-spacing: 0.09em;
+  }
+
+  .hint-btn {
+    border: 1px solid rgba(94, 224, 255, 0.5);
+    background: rgba(50, 153, 190, 0.18);
+    color: #dff9ff;
+    border-radius: 7px;
+    font-size: 0.7rem;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    font-weight: 700;
+    padding: 0.28rem 0.58rem;
+    cursor: pointer;
+    min-height: 30px;
+  }
+
+  .hint-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .mission-list {
+    margin: 0.65rem 0 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .mission-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.76rem;
+    color: #8ca1bf;
+    letter-spacing: 0.01em;
+    transition: color 0.2s ease;
+  }
+
+  .mission-list li .mission-marker {
+    width: 1.45rem;
+    display: inline-flex;
+    justify-content: center;
+    color: #87a0bf;
+    font-weight: 700;
+    font-size: 0.68rem;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 999px;
+    padding: 0.1rem 0.2rem;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .mission-list li.active {
+    color: #9beeff;
+  }
+
+  .mission-list li.active .mission-marker {
+    color: #9beeff;
+    border-color: rgba(112, 229, 255, 0.5);
+    background: rgba(112, 229, 255, 0.14);
+  }
+
+  .mission-list li.done {
+    color: #8cf8bf;
+  }
+
+  .mission-list li.done .mission-marker {
+    color: #0d2f1b;
+    border-color: rgba(110, 255, 180, 0.75);
+    background: rgba(110, 255, 180, 0.9);
+  }
+
+  .bonus-objective-shell {
+    margin-top: 0.62rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.09);
+    padding-top: 0.48rem;
+  }
+
+  .bonus-objective-label {
+    display: block;
+    font-size: 0.61rem;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: #8ab5d7;
+  }
+
+  .bonus-list {
+    margin: 0.4rem 0 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.28rem;
+  }
+
+  .bonus-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.7rem;
+    color: #8ca1bf;
+  }
+
+  .bonus-list li .mission-marker {
+    width: 1.45rem;
+    display: inline-flex;
+    justify-content: center;
+    color: #87a0bf;
+    font-weight: 700;
+    font-size: 0.62rem;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 999px;
+    padding: 0.1rem 0.2rem;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .bonus-list li.done {
+    color: #8cf8bf;
+  }
+
+  .bonus-list li.done .mission-marker {
+    color: #0d2f1b;
+    border-color: rgba(110, 255, 180, 0.75);
+    background: rgba(110, 255, 180, 0.9);
+  }
+
+  .bonus-list li.failed {
+    color: #ffadb4;
+  }
+
+  .bonus-list li.failed .mission-marker {
+    color: #3a1117;
+    border-color: rgba(255, 120, 132, 0.75);
+    background: rgba(255, 120, 132, 0.85);
+  }
+
+  .modal-overlay {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(2, 4, 8, 0.88);
+    z-index: 80;
+  }
+
+  .modal-overlay.active {
+    display: flex;
+  }
+
+  .modal-window {
+    width: min(520px, 90vw);
+    background: linear-gradient(160deg, #0f1625, #0a111b);
+    border: 1px solid rgba(90, 224, 255, 0.28);
+    border-radius: 12px;
+    padding: 1.35rem;
+    box-shadow: 0 20px 45px rgba(0, 0, 0, 0.55);
+  }
+
+  .modal-window h2,
+  .modal-window h3 {
+    margin: 0 0 0.6rem;
+  }
+
+  .modal-window p {
+    margin: 0.5rem 0;
+    color: #ced8e7;
+  }
+
+  .modal-window ul {
+    margin: 0.7rem 0;
+    padding-left: 1.1rem;
+    color: #b9c7da;
+    font-size: 0.92rem;
+  }
+
+  .pilot-shell {
+    margin-top: 0.58rem;
+    display: grid;
+    gap: 0.28rem;
+  }
+
+  .pilot-label {
+    font-size: 0.66rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #8cb0d3;
+    font-weight: 700;
+  }
+
+  .mode-select-shell {
+    margin-top: 0.64rem;
+  }
+
+  .mode-select-label {
+    display: block;
+    font-size: 0.66rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #8cb0d3;
+    font-weight: 700;
+  }
+
+  .mode-option-grid {
+    margin-top: 0.36rem;
+    display: grid;
+    gap: 0.32rem;
+  }
+
+  .mode-option-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    border: 1px solid rgba(116, 224, 255, 0.23);
+    border-radius: 9px;
+    background: rgba(11, 19, 32, 0.55);
+    padding: 0.42rem 0.5rem;
+    cursor: pointer;
+  }
+
+  .mode-option-card input[type="radio"] {
+    margin: 0.24rem 0 0;
+    accent-color: #5de0ff;
+  }
+
+  .mode-option-card strong {
+    display: block;
+    font-size: 0.74rem;
+    color: #d6efff;
+    letter-spacing: 0.02em;
+  }
+
+  .mode-option-card small {
+    display: block;
+    margin-top: 0.1rem;
+    font-size: 0.65rem;
+    color: #8ea7c5;
+    line-height: 1.25;
+    letter-spacing: 0.01em;
+  }
+
+  .session-champion-line {
+    margin-top: 0.45rem;
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #84a7ca;
+  }
+
+  .session-champion-line strong {
+    color: #9bf8cf;
+    margin-left: 0.2rem;
+    letter-spacing: 0.1em;
+  }
+
+  .victory-metrics {
+    margin-top: 0.6rem;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid rgba(115, 223, 255, 0.2);
+    border-radius: 8px;
+    background: rgba(11, 18, 29, 0.62);
+    display: grid;
+    gap: 0.24rem;
+  }
+
+  .victory-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.82rem;
+    color: #c2d2e6;
+  }
+
+  .victory-line strong {
+    color: #dcf8ff;
+    letter-spacing: 0.04em;
+  }
+
+  .victory-record-badge {
+    min-height: 1rem;
+    font-size: 0.69rem;
+    color: #7fffc7;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+
+  .victory-bonus-grid {
+    margin-top: 0.56rem;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35rem;
+  }
+
+  .victory-bonus-grid div {
+    font-size: 0.72rem;
+    color: #a8bad1;
+    display: flex;
+    justify-content: space-between;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 7px;
+    padding: 0.34rem 0.42rem;
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .victory-bonus-grid strong {
+    color: #9ef4c4;
+  }
+
+  .loading-bar-container {
+    margin-top: 0.8rem;
+    width: 100%;
+    height: 6px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.14);
+    overflow: hidden;
+  }
+
+  .loading-bar {
+    width: 0;
+    height: 100%;
+    background: linear-gradient(90deg, #35d7ff, #86f2ff);
+    transition: width 0.2s ease;
+  }
+
+  .modal-window input:not([type="radio"]) {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(1, 4, 9, 0.7);
+    color: #f4f9ff;
+    border-radius: 8px;
+    padding: 0.6rem;
+    margin-top: 0.4rem;
+  }
+
+  .modal-feedback {
+    min-height: 1.2rem;
+    font-size: 0.85rem;
+    color: #7ee9ff;
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: 0.6rem;
+    margin-top: 0.7rem;
+  }
+
+  .sys-btn {
+    border: 1px solid rgba(83, 230, 255, 0.4);
+    background: rgba(41, 204, 240, 0.15);
+    color: #dff8ff;
+    border-radius: 8px;
+    padding: 0.55rem 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+  }
+
+  .sys-btn.alt {
+    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.08);
+    color: #d2d9e5;
+  }
+
+  .inventory-bar {
+    position: absolute;
+    left: 0.75rem;
+    right: auto;
+    bottom: 0.55rem;
+    display: flex;
+    justify-content: flex-start;
+    gap: 0.65rem;
+    padding: 0.42rem 0.46rem;
+    background: rgba(4, 8, 14, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 11px;
+    z-index: 35;
+    width: fit-content;
+    max-width: calc(100vw - 1.5rem);
+  }
+
+  :global(.inv-slot) {
+    width: 46px;
+    height: 46px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(10, 17, 28, 0.75);
+    color: #d9f2ff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+
+  :global(.inv-slot.selected) {
+    border-color: #4be7ff;
+    box-shadow: 0 0 14px rgba(75, 231, 255, 0.45);
+  }
+
+  :global(.inv-slot:disabled) {
+    opacity: 0.42;
+    cursor: default;
+  }
+
+  :global(.inv-code) {
+    font-size: 0.68rem;
+  }
+
+  .notification-area {
+    position: absolute;
+    left: 50%;
+    bottom: 4.7rem;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    z-index: 60;
+  }
+
+  :global(.game-toast) {
+    padding: 0.55rem 0.9rem;
+    border-radius: 8px;
+    font-size: 0.86rem;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(8, 14, 24, 0.92);
+    color: #ecf4ff;
+    animation: toast-in 0.2s ease;
+  }
+
+  :global(.game-toast.success) {
+    border-color: rgba(48, 255, 143, 0.45);
+  }
+
+  :global(.game-toast.error) {
+    border-color: rgba(255, 90, 90, 0.45);
+  }
+
+  :global(.game-toast.warn) {
+    border-color: rgba(255, 190, 77, 0.45);
+  }
+
+  :global(.game-toast.fade-out) {
+    opacity: 0;
+    transform: translateY(-8px);
+    transition: all 0.22s ease;
+  }
+
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .mobile-controls {
+    position: absolute;
+    inset: 0;
+    display: none;
+    z-index: 45;
+    pointer-events: none;
+  }
+
+  .move-stick {
+    position: absolute;
+    left: 0.85rem;
+    bottom: 6.25rem;
+    width: 154px;
+    height: 154px;
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+    z-index: 54;
+  }
+
+  .move-stick-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1px solid rgba(170, 224, 255, 0.35);
+    background:
+      radial-gradient(circle at 30% 28%, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0)),
+      rgba(8, 16, 27, 0.35);
+    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.28);
+  }
+
+  .move-stick-thumb {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 62px;
+    height: 62px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    border: 1px solid rgba(182, 232, 255, 0.55);
+    background: rgba(34, 110, 150, 0.24);
+    box-shadow:
+      0 4px 14px rgba(0, 0, 0, 0.35),
+      inset 0 0 10px rgba(185, 235, 255, 0.28);
+    transition: transform 0.04s linear;
+    touch-action: none;
+  }
+
+  .mobile-actions {
+    position: absolute;
+    right: 0.95rem;
+    top: 6.3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    padding: 0.34rem;
+    border-radius: 14px;
+    background: rgba(4, 11, 18, 0.36);
+    border: 1px solid rgba(129, 219, 255, 0.16);
+    pointer-events: auto;
+    z-index: 54;
+  }
+
+  .action-btn {
+    min-width: 70px;
+    min-height: 42px;
+    border: 1px solid rgba(121, 229, 255, 0.35);
+    background: rgba(8, 19, 30, 0.85);
+    color: #e8f6ff;
+    border-radius: 12px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    touch-action: none;
+  }
+
+  .interact-btn {
+    border-color: rgba(116, 255, 187, 0.5);
+    color: #d8ffe9;
+  }
+
+  .look-zone {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(62vw, 460px);
+    background: rgba(0, 0, 0, 0);
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+    padding: 5.2rem 0.8rem 0.8rem;
+    touch-action: none;
+    user-select: none;
+    pointer-events: auto;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    z-index: 50;
+  }
+
+  .look-zone.active {
+    background: rgba(0, 0, 0, 0);
+  }
+
+  .look-zone-label {
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(201, 230, 255, 0.58);
+    font-weight: 700;
+    pointer-events: none;
+  }
+
+  .mobile-use-btn {
+    position: absolute;
+    right: clamp(4.6rem, 20vw, 9.3rem);
+    top: 56%;
+    transform: translateY(-50%);
+    min-width: 78px;
+    min-height: 46px;
+    border-radius: 14px;
+    border: 1px solid rgba(116, 255, 187, 0.52);
+    background: rgba(6, 24, 16, 0.84);
+    color: #d8ffe9;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    pointer-events: auto;
+    z-index: 56;
+  }
+
+  @media (max-width: 900px) {
+    .mobile-controls {
+      display: block;
+    }
+
+    .objective-panel {
+      max-width: min(78vw, 340px);
+      max-height: 56vh;
+      overflow: auto;
+    }
+
+    .mission-fab {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .mission-shell .objective-panel {
+      display: none;
+      margin-top: 0.45rem;
+      max-width: min(78vw, 320px);
+    }
+
+    .mission-shell.open .objective-panel {
+      display: block;
+    }
+
+    .objective-panel.collapsed .objective-content {
+      display: none;
+    }
+
+    .timer {
+      font-size: 1.5rem;
+    }
+
+    .header-left-actions {
+      gap: 0.35rem;
+    }
+
+    .quick-hint-btn {
+      padding: 0.42rem 0.56rem;
+      min-height: 34px;
+      font-size: 0.72rem;
+    }
+
+    .victory-bonus-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .best-display {
+      font-size: 0.61rem;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .move-stick {
+      left: 0.62rem;
+      bottom: 6.08rem;
+      width: 132px;
+      height: 132px;
+    }
+
+    .move-stick-thumb {
+      width: 52px;
+      height: 52px;
+    }
+
+    .mobile-actions {
+      right: 0.62rem;
+      top: 6.0rem;
+      gap: 0.56rem;
+      padding: 0.26rem;
+    }
+
+    .action-btn {
+      min-width: 64px;
+      min-height: 38px;
+      font-size: 0.66rem;
+    }
+
+    .look-zone {
+      width: 66vw;
+      top: 0;
+      bottom: 0;
+      padding: 4.9rem 0.65rem 0.65rem;
+    }
+
+    .look-zone-label {
+      font-size: 0.56rem;
+    }
+
+    .mobile-use-btn {
+      right: clamp(3.4rem, 20vw, 6.2rem);
+      top: 58%;
+      min-width: 64px;
+      min-height: 40px;
+      font-size: 0.68rem;
+    }
+
+    .back-btn {
+      padding: 0.45rem 0.62rem;
+      font-size: 0.8rem;
+    }
+
+    .quick-hint-btn {
+      padding: 0.4rem 0.52rem;
+      min-height: 32px;
+      font-size: 0.66rem;
+      letter-spacing: 0.04em;
+    }
+
+    .inventory-bar {
+      left: 0.5rem;
+      bottom: 0.45rem;
+      gap: 0.35rem;
+      padding: 0.3rem 0.34rem;
+    }
+
+    :global(.inv-slot) {
+      width: 40px;
+      height: 40px;
+    }
+  }
+</style>
+
+<script>
+  import '../../scripts/game3d/main.ts';
+
+  const controlButtons = document.querySelectorAll<HTMLElement>('[data-code]');
+  const moveStick = document.getElementById('move-stick');
+  const moveStickThumb = document.getElementById('move-stick-thumb');
+  const interactButton = document.getElementById('mobile-use-btn');
+  const lookZone = document.getElementById('look-zone');
+  const missionShell = document.getElementById('mission-shell');
+  const missionFab = document.getElementById('mission-fab');
+  const startBtn = document.getElementById('start-btn');
+  const resumeBtn = document.getElementById('resume-btn');
+
+  const emitMove = (code: string, pressed: boolean) => {
+    document.dispatchEvent(new CustomEvent('game3d:input', {
+      detail: { code, pressed }
+    }));
+  };
+
+  const emitLook = (deltaX: number, deltaY: number) => {
+    document.dispatchEvent(new CustomEvent('game3d:look', {
+      detail: { deltaX, deltaY }
+    }));
+  };
+
+  const emitInteract = () => {
+    document.dispatchEvent(new CustomEvent('game3d:interact'));
+  };
+
+  const emitAxis = (x: number, y: number) => {
+    document.dispatchEvent(new CustomEvent('game3d:axis', {
+      detail: { x, y }
+    }));
+  };
+
+  const bindHoldControl = (button: HTMLElement, code: string) => {
+    const press = (event: Event) => {
+      event.preventDefault();
+      emitMove(code, true);
+    };
+    const release = (event: Event) => {
+      event.preventDefault();
+      emitMove(code, false);
+    };
+
+    button.addEventListener('touchstart', press, { passive: false });
+    button.addEventListener('touchend', release, { passive: false });
+    button.addEventListener('touchcancel', release, { passive: false });
+    button.addEventListener('mousedown', press);
+    button.addEventListener('mouseup', release);
+    button.addEventListener('mouseleave', release);
+  };
+
+  controlButtons.forEach((button) => {
+    const code = button.dataset.code;
+    if (!code) return;
+    bindHoldControl(button, code);
+  });
+
+  if (moveStick && moveStickThumb) {
+    let activePointerId: number | null = null;
+    const radius = 58;
+
+    const setThumb = (x: number, y: number) => {
+      moveStickThumb.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+    };
+
+    const updateStick = (event: PointerEvent) => {
+      const rect = moveStick.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      let dx = event.clientX - centerX;
+      let dy = event.clientY - centerY;
+
+      const distance = Math.hypot(dx, dy);
+      if (distance > radius) {
+        const ratio = radius / distance;
+        dx *= ratio;
+        dy *= ratio;
+      }
+
+      setThumb(dx, dy);
+
+      const nx = Math.max(-1, Math.min(1, dx / radius));
+      const ny = Math.max(-1, Math.min(1, -dy / radius));
+      emitAxis(nx, ny);
+    };
+
+    moveStick.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      activePointerId = event.pointerId;
+      (moveStick as HTMLElement).setPointerCapture(event.pointerId);
+      updateStick(event);
+    });
+
+    moveStick.addEventListener('pointermove', (event) => {
+      if (activePointerId !== event.pointerId) return;
+      updateStick(event);
+    });
+
+    const releaseStick = (event: PointerEvent) => {
+      if (activePointerId !== event.pointerId) return;
+      activePointerId = null;
+      setThumb(0, 0);
+      emitAxis(0, 0);
+    };
+
+    moveStick.addEventListener('pointerup', releaseStick);
+    moveStick.addEventListener('pointercancel', releaseStick);
+    moveStick.addEventListener('pointerleave', releaseStick);
+  }
+
+  interactButton?.addEventListener('touchstart', (event) => {
+    event.preventDefault();
+    emitInteract();
+  }, { passive: false });
+  interactButton?.addEventListener('click', emitInteract);
+
+  if (lookZone) {
+    let activePointerId: number | null = null;
+    let lastX = 0;
+    let lastY = 0;
+
+    lookZone.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      activePointerId = event.pointerId;
+      lastX = event.clientX;
+      lastY = event.clientY;
+      lookZone.classList.add('active');
+      (lookZone as HTMLElement).setPointerCapture(event.pointerId);
+    });
+
+    lookZone.addEventListener('pointermove', (event) => {
+      if (activePointerId !== event.pointerId) return;
+      const dx = event.clientX - lastX;
+      const dy = event.clientY - lastY;
+      lastX = event.clientX;
+      lastY = event.clientY;
+      emitLook(dx * 1.55, dy * 1.4);
+    });
+
+    const releaseLook = (event: PointerEvent) => {
+      if (activePointerId !== event.pointerId) return;
+      activePointerId = null;
+      lookZone.classList.remove('active');
+    };
+
+    lookZone.addEventListener('pointerup', releaseLook);
+    lookZone.addEventListener('pointercancel', releaseLook);
+    lookZone.addEventListener('pointerleave', releaseLook);
+  }
+
+  const requestImmersiveMode = async () => {
+    const gameContainer = document.querySelector('.game-container') as HTMLElement | null;
+    if (!gameContainer) return;
+
+    if (!document.fullscreenElement && gameContainer.requestFullscreen) {
+      try {
+        await gameContainer.requestFullscreen();
+      } catch {
+        // Ignore browser-level fullscreen rejections.
+      }
+    }
+
+    const orientation = (screen as any).orientation;
+    if (orientation?.lock) {
+      try {
+        await orientation.lock('landscape');
+      } catch {
+        // Orientation lock is browser/device dependent.
+      }
+    }
+  };
+
+  startBtn?.addEventListener('click', requestImmersiveMode);
+  resumeBtn?.addEventListener('click', requestImmersiveMode);
+
+  if (window.matchMedia('(max-width: 900px)').matches) {
+    missionShell?.classList.remove('open');
+    missionFab?.setAttribute('aria-expanded', 'false');
+  }
+
+  missionFab?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (!missionShell) return;
+    const opened = missionShell.classList.toggle('open');
+    missionFab.setAttribute('aria-expanded', String(opened));
+  });
+
+  document.addEventListener('pointerdown', (event) => {
+    if (!missionShell || !missionFab) return;
+    if (!window.matchMedia('(max-width: 900px)').matches) return;
+    if (!missionShell.classList.contains('open')) return;
+
+    const target = event.target as Node | null;
+    if (target && missionShell.contains(target)) return;
+
+    missionShell.classList.remove('open');
+    missionFab.setAttribute('aria-expanded', 'false');
+  });
+</script>
