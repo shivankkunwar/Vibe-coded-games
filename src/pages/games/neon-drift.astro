@@ -1,0 +1,972 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="Happy Drift | Fun Racing">
+  <main class="game-container">
+    <canvas id="game-canvas"></canvas>
+
+    <div id="ui-layer">
+      <div id="crosshair"></div>
+      <div id="start-countdown" class="start-countdown" aria-live="polite"></div>
+
+      <header class="game-header">
+        <div class="header-left">
+          <a href="/" class="back-btn" aria-label="Back to games">Exit</a>
+        </div>
+        <div class="header-center">
+          <div class="lap-display">
+            <span class="lap-label">LAP</span>
+            <span class="lap-value" id="lap-display">1/3</span>
+          </div>
+          <div class="timer" id="timer-display">00:00.00</div>
+          <div class="position-display">
+            <span class="pos-label">POS</span>
+            <span class="pos-value" id="position-display">1/1</span>
+          </div>
+        </div>
+        <div class="header-right">
+          <div class="speed-display">
+            <span class="speed-value" id="speed-display">0</span>
+            <span class="speed-unit">KM/H</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="dashboard" id="dashboard">
+        <div class="dash-left">
+          <div class="gauge speed-gauge">
+            <svg viewBox="0 0 120 60" class="gauge-svg">
+              <defs>
+                <linearGradient id="speedGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" style="stop-color:#00ffff;stop-opacity:1" />
+                  <stop offset="50%" style="stop-color:#00ff88;stop-opacity:1" />
+                  <stop offset="100%" style="stop-color:#ff00ff;stop-opacity:1" />
+                </linearGradient>
+              </defs>
+              <path class="gauge-track" d="M 10 50 A 40 40 0 0 1 110 50" />
+              <path class="gauge-fill" id="speed-gauge-fill" d="M 10 50 A 40 40 0 0 1 10 50" />
+              <line class="gauge-needle" id="speed-needle" x1="60" y1="50" x2="60" y2="15" />
+            </svg>
+          </div>
+        </div>
+        <div class="dash-center">
+          <div class="gear-display" id="gear-display">N</div>
+          <div class="drift-indicator" id="drift-indicator">
+            <div class="drift-bar"></div>
+            <span class="drift-label">DRIFT</span>
+          </div>
+        </div>
+        <div class="dash-right">
+          <div class="mini-map" id="mini-map">
+            <canvas id="minimap-canvas" width="120" height="120"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="notification-area" id="notification-area"></div>
+
+      <div id="intro-modal" class="modal-overlay active">
+        <div class="modal-window">
+          <h2 class="neon-title">Happy Drift</h2>
+          <p class="modal-subtitle">Fun Time Attack Racing</p>
+          <ul class="controls-list">
+            <li><kbd>W</kbd> / <kbd>↑</kbd> Accelerate</li>
+            <li><kbd>S</kbd> / <kbd>↓</kbd> Brake / Reverse</li>
+            <li><kbd>A</kbd> / <kbd>D</kbd> Steer Left/Right</li>
+            <li><kbd>Space</kbd> Handbrake (Drift)</li>
+            <li><kbd>Shift</kbd> Nitro Boost</li>
+          </ul>
+          <div class="mode-select-shell">
+            <span class="mode-select-label">Race Mode</span>
+            <div class="mode-option-grid">
+              <label class="mode-option-card">
+                <input type="radio" name="race-mode" value="time-attack" checked />
+                <div>
+                  <strong>Time Attack</strong>
+                  <small>Beat your best lap time. No opponents.</small>
+                </div>
+              </label>
+              <label class="mode-option-card">
+                <input type="radio" name="race-mode" value="drift-master" />
+                <div>
+                  <strong>Drift Master</strong>
+                  <small>Score points through drift combos.</small>
+                </div>
+              </label>
+            </div>
+          </div>
+          <div class="pilot-shell">
+            <label class="pilot-label" for="pilot-name-input">Racer Callsign</label>
+            <input id="pilot-name-input" maxlength="14" value="ROOKIE" placeholder="ROOKIE" />
+          </div>
+          <div class="loading-bar-container">
+            <div id="loading-bar" class="loading-bar"></div>
+          </div>
+          <p id="loading-text">Loading Systems (0%)</p>
+          <button id="start-btn" class="sys-btn" style="display:none">Start Engine</button>
+        </div>
+      </div>
+
+      <div id="pause-modal" class="modal-overlay">
+        <div class="modal-window">
+          <h3>Paused</h3>
+          <p>Race paused. Ready to continue?</p>
+          <div class="modal-actions">
+            <button id="resume-btn" class="sys-btn">Resume</button>
+            <button class="sys-btn alt" data-restart-game>Restart Race</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="lap-modal" class="modal-overlay">
+        <div class="modal-window lap-complete">
+          <h3>Lap Complete!</h3>
+          <div class="lap-metrics">
+            <div class="lap-line">Lap Time <strong id="lap-time-value">00:00.00</strong></div>
+            <div class="lap-line">Best Lap <strong id="best-lap-value">--:--.--</strong></div>
+            <div class="lap-line" id="drift-score-line" style="display:none">Drift Score <strong id="drift-score-value">0</strong></div>
+          </div>
+          <div class="modal-actions">
+            <button class="sys-btn" data-close-modal>Continue</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="finish-modal" class="modal-overlay">
+        <div class="modal-window race-finish">
+          <h3>Race Complete!</h3>
+          <div class="finish-metrics">
+            <div class="finish-line">Total Time <strong id="total-time-value">00:00.00</strong></div>
+            <div class="finish-line">Best Lap <strong id="finish-best-lap-value">--:--.--</strong></div>
+            <div class="finish-line" id="finish-drift-line" style="display:none">Total Drift <strong id="finish-drift-value">0</strong></div>
+            <div class="finish-record-badge" id="finish-record-badge"></div>
+          </div>
+          <div class="modal-actions">
+            <button class="sys-btn" data-restart-game>Race Again</button>
+            <a class="sys-btn alt" href="/">Return to Hub</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="mobile-controls" id="mobile-controls">
+        <div class="move-stick" id="move-stick" aria-label="Steering joystick">
+          <div class="move-stick-ring"></div>
+          <div class="move-stick-thumb" id="move-stick-thumb"></div>
+        </div>
+        <div class="mobile-actions">
+          <button class="action-btn gas-btn" id="mobile-gas-btn" type="button">GAS</button>
+          <button class="action-btn brake-btn" id="mobile-brake-btn" type="button">BRAKE</button>
+          <button class="action-btn drift-btn" id="mobile-drift-btn" type="button">DRIFT</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</Layout>
+
+<script>
+  import '../../scripts/racer/main.ts';
+
+  // Mobile controls
+  const moveStick = document.getElementById('move-stick');
+  const moveStickThumb = document.getElementById('move-stick-thumb');
+  const gasBtn = document.getElementById('mobile-gas-btn');
+  const brakeBtn = document.getElementById('mobile-brake-btn');
+  const driftBtn = document.getElementById('mobile-drift-btn');
+
+  if (moveStick && moveStickThumb) {
+    let startX = 0, startY = 0;
+    const maxDistance = 50;
+
+    moveStick.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      const touch = e.changedTouches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+    });
+
+    moveStick.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      const touch = e.changedTouches[0];
+      const deltaX = touch.clientX - startX;
+      const deltaY = touch.clientY - startY;
+      const distance = Math.min(Math.sqrt(deltaX ** 2 + deltaY ** 2), maxDistance);
+      const angle = Math.atan2(deltaY, deltaX);
+
+      const thumbX = Math.cos(angle) * distance;
+      const thumbY = Math.sin(angle) * distance;
+      moveStickThumb.style.transform = `translate(calc(-50% + ${thumbX}px), calc(-50% + ${thumbY}px))`;
+
+      // Emit steering axis
+      document.dispatchEvent(new CustomEvent('racer:axis', {
+        detail: { x: thumbX / maxDistance, y: thumbY / maxDistance }
+      }));
+    });
+
+    moveStick.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      moveStickThumb.style.transform = 'translate(-50%, -50%)';
+      document.dispatchEvent(new CustomEvent('racer:axis', { detail: { x: 0, y: 0 } }));
+    });
+  }
+
+  if (gasBtn) {
+    gasBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      document.dispatchEvent(new CustomEvent('racer:input', { detail: { code: 'KeyW', pressed: true } }));
+    });
+    gasBtn.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      document.dispatchEvent(new CustomEvent('racer:input', { detail: { code: 'KeyW', pressed: false } }));
+    });
+  }
+
+  if (brakeBtn) {
+    brakeBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      document.dispatchEvent(new CustomEvent('racer:input', { detail: { code: 'KeyS', pressed: true } }));
+    });
+    brakeBtn.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      document.dispatchEvent(new CustomEvent('racer:input', { detail: { code: 'KeyS', pressed: false } }));
+    });
+  }
+
+  if (driftBtn) {
+    driftBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      document.dispatchEvent(new CustomEvent('racer:input', { detail: { code: 'Space', pressed: true } }));
+    });
+    driftBtn.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      document.dispatchEvent(new CustomEvent('racer:input', { detail: { code: 'Space', pressed: false } }));
+    });
+  }
+</script>
+
+<style>
+  html,
+  body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #87CEEB;
+  }
+
+  .game-container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    background: radial-gradient(circle at 10% 20%, #b0e0e6, #87CEEB 58%);
+  }
+
+  #game-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  #ui-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    color: #333333;
+  }
+
+  .game-header,
+  .dashboard,
+  .mobile-controls,
+  .back-btn,
+  .modal-window {
+    pointer-events: auto;
+  }
+
+  #crosshair {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 4px;
+    height: 4px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: rgba(255, 100, 100, 0.9);
+    box-shadow: 0 0 8px rgba(255, 100, 100, 0.6);
+    z-index: 20;
+  }
+
+  .game-header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: linear-gradient(to bottom, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0));
+    z-index: 30;
+  }
+
+  .back-btn {
+    text-decoration: none;
+    color: #555;
+    border: 1px solid rgba(100, 100, 100, 0.3);
+    border-radius: 6px;
+    padding: 0.4rem 0.7rem;
+    font-size: 0.85rem;
+    background: rgba(255, 255, 255, 0.9);
+    transition: all 0.2s ease;
+  }
+
+  .back-btn:hover {
+    background: rgba(255, 255, 255, 1);
+    border-color: rgba(100, 100, 100, 0.5);
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .header-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+  }
+
+  .lap-display,
+  .position-display {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(100, 100, 100, 0.3);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+  }
+
+  .lap-label,
+  .pos-label {
+    color: #ff6666;
+    letter-spacing: 0.1em;
+  }
+
+  .lap-value,
+  .pos-value {
+    color: #333;
+    font-size: 0.85rem;
+  }
+
+  .timer {
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    color: #ff6666;
+    text-shadow: 0 0 10px rgba(255, 100, 100, 0.3);
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+  }
+
+  .speed-display {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.1rem;
+  }
+
+  .speed-value {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: #ff6666;
+    text-shadow: 0 0 10px rgba(255, 100, 100, 0.3);
+  }
+
+  .speed-unit {
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: #ff8888;
+    letter-spacing: 0.1em;
+  }
+
+  .dashboard {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 1rem 1.5rem 0.5rem;
+    background: linear-gradient(to top, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0));
+    z-index: 25;
+  }
+
+  .dash-left,
+  .dash-right {
+    flex: 1;
+    max-width: 180px;
+  }
+
+  .dash-center {
+    flex: 1;
+    max-width: 200px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .gauge {
+    width: 120px;
+    height: 60px;
+  }
+
+  .gauge-svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .gauge-track {
+    fill: none;
+    stroke: rgba(255, 100, 100, 0.2);
+    stroke-width: 8;
+    stroke-linecap: round;
+  }
+
+  .gauge-fill {
+    fill: none;
+    stroke: url(#speedGradient);
+    stroke-width: 8;
+    stroke-linecap: round;
+    transition: d 0.1s ease;
+  }
+
+  .gauge-needle {
+    stroke: #333;
+    stroke-width: 2;
+    transition: transform 0.1s ease;
+    transform-origin: 60px 50px;
+  }
+
+  .gear-display {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: #ff6666;
+    text-shadow: 0 0 15px rgba(255, 100, 100, 0.3);
+    background: rgba(255, 255, 255, 0.9);
+    border: 2px solid rgba(255, 100, 100, 0.4);
+    border-radius: 8px;
+    padding: 0.25rem 1rem;
+    min-width: 60px;
+    text-align: center;
+  }
+
+  .drift-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .drift-bar {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 100, 100, 0.2);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .drift-bar::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #ff6666, #ffaaaa);
+    box-shadow: 0 0 10px rgba(255, 100, 100, 0.4);
+    transition: width 0.15s ease;
+  }
+
+  .drift-indicator.active .drift-bar::after {
+    width: var(--drift-intensity, 0%);
+  }
+
+  .drift-label {
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: #ff8888;
+    letter-spacing: 0.15em;
+  }
+
+  .mini-map {
+    width: 120px;
+    height: 120px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(100, 100, 100, 0.3);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  #minimap-canvas {
+    width: 100%;
+    height: 100%;
+  }
+
+  .modal-overlay {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(4px);
+    z-index: 80;
+  }
+
+  .modal-overlay.active {
+    display: flex;
+  }
+
+  .modal-window {
+    width: min(480px, 90vw);
+    background: linear-gradient(160deg, #ffffff, #f0f8ff);
+    border: 2px solid rgba(255, 100, 100, 0.4);
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 20px 45px rgba(0, 0, 0, 0.15);
+  }
+
+  .modal-window h2,
+  .modal-window h3 {
+    margin: 0 0 0.4rem;
+  }
+
+  .neon-title {
+    font-size: 2.5rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #ff6666, #ff9966);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: 0.05em;
+  }
+
+  .modal-subtitle {
+    color: #ff8888;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+    letter-spacing: 0.1em;
+  }
+
+  .modal-window p {
+    margin: 0.5rem 0;
+    color: #555;
+  }
+
+  .controls-list {
+    margin: 1rem 0;
+    padding-left: 1rem;
+    color: #555;
+    font-size: 0.85rem;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.4rem;
+  }
+
+  .controls-list kbd {
+    background: rgba(255, 100, 100, 0.15);
+    border: 1px solid rgba(255, 100, 100, 0.4);
+    border-radius: 4px;
+    padding: 0.15rem 0.4rem;
+    font-family: monospace;
+    font-size: 0.8rem;
+    color: #ff6666;
+  }
+
+  .pilot-shell,
+  .mode-select-shell {
+    margin-top: 0.75rem;
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .pilot-label,
+  .mode-select-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #888;
+    font-weight: 700;
+  }
+
+  .mode-option-grid {
+    margin-top: 0.4rem;
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .mode-option-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    border: 1px solid rgba(255, 100, 100, 0.3);
+    border-radius: 8px;
+    background: rgba(255, 100, 100, 0.08);
+    padding: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .mode-option-card:hover {
+    background: rgba(255, 100, 100, 0.15);
+    border-color: rgba(255, 100, 100, 0.5);
+  }
+
+  .mode-option-card input[type="radio"] {
+    margin: 0.2rem 0 0;
+    accent-color: #ff6666;
+  }
+
+  .mode-option-card strong {
+    display: block;
+    font-size: 0.8rem;
+    color: #555;
+    letter-spacing: 0.02em;
+  }
+
+  .mode-option-card small {
+    display: block;
+    margin-top: 0.15rem;
+    font-size: 0.7rem;
+    color: #888;
+    line-height: 1.3;
+  }
+
+  .modal-window input:not([type="radio"]) {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid rgba(255, 100, 100, 0.3);
+    background: rgba(255, 255, 255, 0.9);
+    color: #333;
+    border-radius: 6px;
+    padding: 0.5rem;
+    margin-top: 0.3rem;
+    font-family: inherit;
+  }
+
+  .loading-bar-container {
+    margin-top: 1rem;
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(100, 100, 100, 0.1);
+    overflow: hidden;
+  }
+
+  .loading-bar {
+    width: 0;
+    height: 100%;
+    background: linear-gradient(90deg, #ff6666, #ff9966);
+    transition: width 0.2s ease;
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: 0.7rem;
+    margin-top: 1rem;
+  }
+
+  .sys-btn {
+    flex: 1;
+    border: 1px solid rgba(255, 100, 100, 0.5);
+    background: rgba(255, 100, 100, 0.15);
+    color: #555;
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    transition: all 0.2s ease;
+  }
+
+  .sys-btn:hover {
+    background: rgba(255, 100, 100, 0.3);
+    border-color: rgba(255, 100, 100, 0.7);
+  }
+
+  .sys-btn.alt {
+    border-color: rgba(100, 100, 100, 0.25);
+    background: rgba(255, 255, 255, 0.8);
+    color: #555;
+  }
+
+  .sys-btn.alt:hover {
+    background: rgba(255, 255, 255, 1);
+  }
+
+    .notification-area {
+      position: absolute;
+      left: 50%;
+      top: 5rem;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      z-index: 60;
+    }
+
+    .start-countdown {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      pointer-events: none;
+      color: #ff6666;
+      font-size: clamp(2rem, 12vw, 5rem);
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      opacity: 0;
+      transform: scale(0.98);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      text-shadow: 0 0 20px rgba(255, 100, 100, 0.3);
+    }
+
+    .start-countdown.active {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+  .game-toast {
+    padding: 0.6rem 1rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    border: 1px solid rgba(100, 100, 100, 0.2);
+    background: rgba(255, 255, 255, 0.95);
+    color: #333;
+    animation: toast-in 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  .game-toast.success {
+    border-color: rgba(100, 200, 100, 0.5);
+  }
+
+  .game-toast.error {
+    border-color: rgba(255, 100, 100, 0.5);
+  }
+
+  .game-toast.warn {
+    border-color: rgba(255, 180, 100, 0.5);
+  }
+
+  .game-toast.info {
+    border-color: rgba(100, 100, 255, 0.5);
+  }
+
+  .game-toast.fade-out {
+    opacity: 0;
+    transform: translateY(-8px);
+    transition: all 0.3s ease;
+  }
+
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .lap-complete,
+  .race-finish {
+    text-align: center;
+  }
+
+  .lap-metrics,
+  .finish-metrics {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    border: 1px solid rgba(255, 100, 100, 0.25);
+    border-radius: 8px;
+    background: rgba(255, 100, 100, 0.05);
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .lap-line,
+  .finish-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+    color: #555;
+  }
+
+  .lap-line strong,
+  .finish-line strong {
+    color: #ff6666;
+    font-size: 1rem;
+    letter-spacing: 0.03em;
+  }
+
+  .finish-record-badge {
+    min-height: 1.2rem;
+    font-size: 0.75rem;
+    color: #66bb66;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 700;
+    margin-top: 0.5rem;
+  }
+
+  .mobile-controls {
+    position: absolute;
+    inset: 0;
+    display: none;
+    z-index: 45;
+    pointer-events: none;
+  }
+
+  .move-stick {
+    position: absolute;
+    left: 1rem;
+    bottom: 8rem;
+    width: 140px;
+    height: 140px;
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+    z-index: 54;
+  }
+
+  .move-stick-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 100, 100, 0.4);
+    background: radial-gradient(circle at 30% 28%, rgba(255, 100, 100, 0.1), rgba(255, 255, 255, 0.3));
+    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.1);
+  }
+
+  .move-stick-thumb {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 56px;
+    height: 56px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, rgba(255, 100, 100, 0.9), rgba(255, 100, 100, 0.4));
+    border: 2px solid rgba(255, 100, 100, 0.7);
+    transition: transform 0.05s linear;
+  }
+
+  .mobile-actions {
+    position: absolute;
+    right: 1rem;
+    bottom: 8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    pointer-events: auto;
+    z-index: 55;
+  }
+
+  .action-btn {
+    min-width: 80px;
+    height: 56px;
+    border-radius: 8px;
+    border: 2px solid;
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-transform: uppercase;
+  }
+
+  .gas-btn {
+    background: rgba(100, 200, 100, 0.2);
+    border-color: rgba(100, 200, 100, 0.5);
+    color: #448844;
+  }
+
+  .gas-btn:active {
+    background: rgba(100, 200, 100, 0.5);
+    transform: scale(0.95);
+  }
+
+  .brake-btn {
+    background: rgba(255, 150, 150, 0.2);
+    border-color: rgba(255, 150, 150, 0.5);
+    color: #cc5555;
+  }
+
+  .brake-btn:active {
+    background: rgba(255, 150, 150, 0.5);
+    transform: scale(0.95);
+  }
+
+  .drift-btn {
+    background: rgba(255, 200, 100, 0.2);
+    border-color: rgba(255, 200, 100, 0.5);
+    color: #cc8844;
+  }
+
+  .drift-btn:active {
+    background: rgba(255, 200, 100, 0.5);
+    transform: scale(0.95);
+  }
+
+  @media (max-width: 768px) {
+    .mobile-controls {
+      display: block;
+    }
+
+    .dashboard {
+      display: none;
+    }
+
+    .game-header {
+      padding: 0.5rem;
+    }
+
+    .timer {
+      font-size: 1.2rem;
+    }
+
+    .speed-value {
+      font-size: 1.4rem;
+    }
+
+    .modal-window {
+      margin: 1rem;
+      width: calc(100vw - 2rem);
+    }
+
+    .neon-title {
+      font-size: 2rem;
+    }
+
+    .controls-list {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
