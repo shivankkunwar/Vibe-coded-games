@@ -8,6 +8,7 @@ export interface GameState {
     currentLap: number;
     totalLaps: number;
     activeModal: string | null;
+    position: number;
 }
 
 export type RaceMode = 'time-attack' | 'drift-master';
@@ -22,6 +23,7 @@ const state: GameState = {
     currentLap: 1,
     totalLaps: 3,
     activeModal: null,
+    position: 1,
 };
 
 export function updateState<K extends keyof GameState>(key: K, value: GameState[K]) {
@@ -35,6 +37,7 @@ export function resetState() {
     state.raceFinished = false;
     state.currentLap = 1;
     state.activeModal = null;
+    state.position = 1;
 }
 
 export { state };

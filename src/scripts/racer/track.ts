@@ -7,7 +7,6 @@ export interface TrackState {
     trackWidth: number;
     startPosition: THREE.Vector3;
     startRotation: number;
-    currentCheckpoint: number;
     currentLap: number;
     lastLapTime: number;
     lapStartTime: number;
@@ -18,6 +17,15 @@ export interface TrackState {
     centerCurve: THREE.CatmullRomCurve3;
 }
 
+export interface CarPosition {
+    x: number;
+    z: number;
+    progress: number;
+    lastCheckpoint: number;
+    currentLap: number;
+    finished: boolean;
+}
+
 const TRACK_CONFIG = { trackWidth: 18, lapCount: 3 };
 
 export function initTrack(scene: THREE.Scene): TrackState {
@@ -25,25 +33,23 @@ export function initTrack(scene: THREE.Scene): TrackState {
     
     const curve = new THREE.CatmullRomCurve3([
         new THREE.Vector3(0, 0, 0),
-        new THREE.Vector3(40, 0, -30),
-        new THREE.Vector3(80, 0, -60),
-        new THREE.Vector3(100, 0, -100),
-        new THREE.Vector3(90, 0, -150),
-        new THREE.Vector3(50, 0, -180),
-        new THREE.Vector3(0, 0, -200),
-        new THREE.Vector3(-60, 0, -190),
-        new THREE.Vector3(-120, 0, -150),
-        new THREE.Vector3(-150, 0, -100),
-        new THREE.Vector3(-160, 0, -40),
-        new THREE.Vector3(-140, 0, 20),
-        new THREE.Vector3(-100, 0, 60),
-        new THREE.Vector3(-50, 0, 80),
-        new THREE.Vector3(0, 0, 60),
-        new THREE.Vector3(30, 0, 30),
-        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(50, 0, -40),
+        new THREE.Vector3(90, 0, -80),
+        new THREE.Vector3(100, 0, -130),
+        new THREE.Vector3(70, 0, -180),
+        new THREE.Vector3(20, 0, -200),
+        new THREE.Vector3(-40, 0, -180),
+        new THREE.Vector3(-100, 0, -140),
+        new THREE.Vector3(-140, 0, -80),
+        new THREE.Vector3(-150, 0, -20),
+        new THREE.Vector3(-130, 0, 40),
+        new THREE.Vector3(-80, 0, 70),
+        new THREE.Vector3(-30, 0, 80),
+        new THREE.Vector3(20, 0, 60),
+        new THREE.Vector3(50, 0, 30),
     ], true);
 
-    const points = curve.getSpacedPoints(500);
+    const points = curve.getSpacedPoints(200);
     
     buildTrackMesh(trackGroup, curve);
     buildStartFinish(trackGroup, points[0], points[1]);
@@ -56,7 +62,7 @@ export function initTrack(scene: THREE.Scene): TrackState {
     const p1 = curve.getPointAt(0.01);
     const dx = p1.x - p0.x;
     const dz = p1.z - p0.z;
-    const startRot = Math.atan2(-dx, dz);
+    const startRot = Math.atan2(-dx, -dz);
 
     return {
         mesh: trackGroup,
@@ -64,7 +70,6 @@ export function initTrack(scene: THREE.Scene): TrackState {
         trackWidth: TRACK_CONFIG.trackWidth,
         startPosition: startPos,
         startRotation: startRot,
-        currentCheckpoint: 0,
         currentLap: 1,
         lastLapTime: 0,
         lapStartTime: performance.now(),
@@ -74,6 +79,110 @@ export function initTrack(scene: THREE.Scene): TrackState {
         minimapPoints: points.map(p => new THREE.Vector2(p.x, p.z)),
         centerCurve: curve
     };
+}
+
+export function createCarPositionTracker(checkpoints: THREE.Vector3[]): CarPosition {
+    return {
+        x: checkpoints[0].x,
+        z: checkpoints[0].z,
+        progress: 0,
+        lastCheckpoint: 0,
+        currentLap: 1,
+        finished: false,
+    };
+}
+
+export function updateCarPosition(pos: CarPosition, track: TrackState) {
+    if (pos.finished) return;
+    
+    const carPos = new THREE.Vector2(pos.x, pos.z);
+    const totalCheckpoints = track.checkpoints.length;
+    
+    let closestCp = 0;
+    let closestDist = Infinity;
+    
+    for (let i = 0; i < totalCheckpoints; i++) {
+        const cp = track.checkpoints[i];
+        const dist = carPos.distanceTo(new THREE.Vector2(cp.x, cp.z));
+        if (dist < closestDist) {
+            closestDist = dist;
+            closestCp = i;
+        }
+    }
+    
+    if (closestDist > TRACK_CONFIG.trackWidth * 2) return;
+    
+    if (closestCp === 0 && pos.lastCheckpoint > totalCheckpoints * 0.7) {
+        pos.currentLap++;
+        pos.lastCheckpoint = 0;
+        
+        if (pos.currentLap > TRACK_CONFIG.lapCount) {
+            pos.finished = true;
+        }
+    } else if (closestCp > pos.lastCheckpoint + 1) {
+        pos.lastCheckpoint = closestCp;
+    }
+    
+    pos.progress = ((pos.currentLap - 1) * totalCheckpoints) + pos.lastCheckpoint;
+}
+
+export function updateTrack(track: TrackState, car: CarState, pos: CarPosition, deltaTime: number) {
+    if (track.raceFinished) return;
+
+    handleCollision(car, track);
+
+    pos.x = car.mesh.position.x;
+    pos.z = car.mesh.position.z;
+    updateCarPosition(pos, track);
+
+    if (pos.currentLap > track.currentLap) {
+        track.currentLap = pos.currentLap;
+        track.lastLapTime = (performance.now() - track.lapStartTime) / 1000;
+        track.lapStartTime = performance.now();
+    }
+
+    if (pos.finished && !track.raceFinished) {
+        track.raceFinished = true;
+    }
+
+    if (car.isDrifting && Math.abs(car.speed) > 3) {
+        track.currentDriftScore += Math.round(car.driftAngle * car.speed * 10 * deltaTime);
+    }
+}
+
+function handleCollision(car: CarState, track: TrackState) {
+    const pos = car.mesh.position;
+    let closestT = 0, minDist = Infinity;
+    
+    for (let i = 0; i <= 200; i++) {
+        const t = i / 200;
+        const pt = track.centerCurve.getPointAt(t);
+        const dist = pos.distanceToSquared(pt);
+        if (dist < minDist) { minDist = dist; closestT = t; }
+    }
+
+    const closestPoint = track.centerCurve.getPointAt(closestT);
+    const tangent = track.centerCurve.getTangentAt(closestT);
+    const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
+    const lateralDist = new THREE.Vector3().subVectors(pos, closestPoint).dot(normal);
+    
+    const maxDist = (track.trackWidth / 2) - 0.8;
+
+    if (Math.abs(lateralDist) > maxDist) {
+        const correction = Math.sign(lateralDist) * maxDist;
+        const clampedPos = closestPoint.clone().add(normal.clone().multiplyScalar(correction));
+        car.mesh.position.set(clampedPos.x, pos.y, clampedPos.z);
+        car.speed *= 0.75;
+    }
+}
+
+export function resetTrack(track: TrackState) {
+    track.currentLap = 1;
+    track.lastLapTime = 0;
+    track.lapStartTime = performance.now();
+    track.raceFinished = false;
+    track.totalDriftScore = 0;
+    track.currentDriftScore = 0;
 }
 
 function buildTrackMesh(group: THREE.Group, curve: THREE.CatmullRomCurve3) {
@@ -187,60 +296,6 @@ function buildTrackMesh(group: THREE.Group, curve: THREE.CatmullRomCurve3) {
     }
 }
 
-function buildTrackSideWalls(group: THREE.Group, curve: THREE.CatmullRomCurve3) {
-    const halfWidth = TRACK_CONFIG.trackWidth / 2;
-    const segmentCount = 200;
-    
-    const wallMaterial = new THREE.MeshStandardMaterial({
-        color: 0x444444,
-        roughness: 0.8,
-    });
-
-    const tireMaterial = new THREE.MeshStandardMaterial({
-        color: 0x1a1a1a,
-        roughness: 0.9,
-    });
-
-    for (let i = 0; i < segmentCount; i++) {
-        const t = i / segmentCount;
-        const point = curve.getPointAt(t);
-        const tangent = curve.getTangentAt(t);
-        const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
-
-        for (let side = -1; side <= 1; side += 2) {
-            const wallGeo = new THREE.BoxGeometry(0.3, 0.6, 1.5);
-            const wall = new THREE.Mesh(wallGeo, wallMaterial);
-            
-            const offset = normal.clone().multiplyScalar(halfWidth + 0.8);
-            wall.position.set(
-                point.x + offset.x * side,
-                0.3,
-                point.z + offset.z * side
-            );
-            wall.rotation.y = Math.atan2(tangent.x, tangent.z);
-            wall.castShadow = true;
-            wall.receiveShadow = true;
-            group.add(wall);
-
-            if (i % 8 === 0) {
-                const tireGeo = new THREE.TorusGeometry(0.3, 0.1, 6, 12);
-                const tire = new THREE.Mesh(tireGeo, tireMaterial);
-                
-                const tireOffset = normal.clone().multiplyScalar(halfWidth + 1.5);
-                tire.position.set(
-                    point.x + tireOffset.x * side,
-                    0.3,
-                    point.z + tireOffset.z * side
-                );
-                tire.rotation.x = Math.PI / 2;
-                tire.rotation.z = Math.atan2(tangent.x, tangent.z);
-                tire.castShadow = true;
-                group.add(tire);
-            }
-        }
-    }
-}
-
 function buildStartFinish(group: THREE.Group, pt1: THREE.Vector3, pt2: THREE.Vector3) {
     const halfWidth = TRACK_CONFIG.trackWidth / 2;
     const dir = new THREE.Vector3().subVectors(pt2, pt1).normalize();
@@ -297,15 +352,15 @@ function buildStartFinish(group: THREE.Group, pt1: THREE.Vector3, pt2: THREE.Vec
     );
     group.add(rightPole);
 
-    const checkeredBannerGeo = new THREE.PlaneGeometry(TRACK_CONFIG.trackWidth + 4, 2);
+    const bannerGeo = new THREE.PlaneGeometry(TRACK_CONFIG.trackWidth + 4, 2);
     const canvas = document.createElement('canvas');
-    canvas.width = 256;
+    canvas.width = 512;
     canvas.height = 64;
     const ctx = canvas.getContext('2d')!;
     for (let i = 0; i < 16; i++) {
         for (let j = 0; j < 4; j++) {
             ctx.fillStyle = (i + j) % 2 === 0 ? 'white' : 'black';
-            ctx.fillRect(i * 16, j * 16, 16, 16);
+            ctx.fillRect(i * 32, j * 16, 32, 16);
         }
     }
     const bannerTexture = new THREE.CanvasTexture(canvas);
@@ -313,68 +368,8 @@ function buildStartFinish(group: THREE.Group, pt1: THREE.Vector3, pt2: THREE.Vec
         map: bannerTexture,
         side: THREE.DoubleSide,
     });
-    
-    const banner = new THREE.Mesh(checkeredBannerGeo, bannerMat);
-    banner.position.set(pt1.x, 7, pt1.z);
+    const banner = new THREE.Mesh(bannerGeo, bannerMat);
+    banner.position.set(pt1.x, 8, pt1.z);
     banner.rotation.y = angle;
     group.add(banner);
-}
-
-export function updateTrack(track: TrackState, car: CarState, deltaTime: number) {
-    if (track.raceFinished) return;
-
-    handleCollision(car, track);
-
-    const carPos = new THREE.Vector2(car.mesh.position.x, car.mesh.position.z);
-    const nextCpIdx = (track.currentCheckpoint + 1) % track.checkpoints.length;
-    
-    if (carPos.distanceTo(new THREE.Vector2(track.checkpoints[nextCpIdx].x, track.checkpoints[nextCpIdx].z)) < TRACK_CONFIG.trackWidth) {
-        if (nextCpIdx === 0 && track.currentCheckpoint > track.checkpoints.length * 0.8) {
-            track.currentLap++;
-            track.lastLapTime = (performance.now() - track.lapStartTime) / 1000;
-            track.lapStartTime = performance.now();
-            if (track.currentLap > TRACK_CONFIG.lapCount) track.raceFinished = true;
-        }
-        track.currentCheckpoint = nextCpIdx;
-    }
-
-    if (car.isDrifting && Math.abs(car.speed) > 3) {
-        track.currentDriftScore += Math.round(car.driftAngle * car.speed * 10 * deltaTime);
-    }
-}
-
-function handleCollision(car: CarState, track: TrackState) {
-    const pos = car.mesh.position;
-    let closestT = 0, minDist = Infinity;
-    
-    for (let i = 0; i <= 200; i++) {
-        const t = i / 200;
-        const pt = track.centerCurve.getPointAt(t);
-        const dist = pos.distanceToSquared(pt);
-        if (dist < minDist) { minDist = dist; closestT = t; }
-    }
-
-    const closestPoint = track.centerCurve.getPointAt(closestT);
-    const tangent = track.centerCurve.getTangentAt(closestT);
-    const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
-    const lateralDist = new THREE.Vector3().subVectors(pos, closestPoint).dot(normal);
-    
-    const maxDist = (track.trackWidth / 2) - 0.8;
-
-    if (Math.abs(lateralDist) > maxDist) {
-        const correction = Math.sign(lateralDist) * maxDist;
-        const clampedPos = closestPoint.clone().add(normal.clone().multiplyScalar(correction));
-        car.mesh.position.set(clampedPos.x, pos.y, clampedPos.z);
-        car.speed *= 0.75;
-    }
-}
-
-export function resetTrack(track: TrackState) {
-    track.currentCheckpoint = 0;
-    track.currentLap = 1;
-    track.lastLapTime = 0;
-    track.lapStartTime = performance.now();
-    track.raceFinished = false;
-    track.totalDriftScore = 0;
-    track.currentDriftScore = 0;
 }

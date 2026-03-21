@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { initCar, updateCar, resetCar, setTreePositions, type CarState } from './car';
-import { initTrack, updateTrack, resetTrack, type TrackState } from './track';
+import { initTrack, updateTrack, resetTrack, createCarPositionTracker, type TrackState, type CarPosition } from './track';
 import { initWorld, getTreePositions } from './world';
+import { createRobotCar, updateRobotCar, resetRobotCar, type RobotCar } from './robot';
 import {
     initUI,
     openModal,
@@ -39,6 +40,8 @@ let countdownActive = false;
 
 let carState: CarState | null = null;
 let trackState: TrackState | null = null;
+let playerPosition: CarPosition | null = null;
+let robotCars: RobotCar[] = [];
 
 export async function initGame() {
     initUI({
@@ -98,6 +101,13 @@ export async function initGame() {
     updateLoadingProgress(0.92);
 
     carState = initCar(camera, scene, trackState);
+    playerPosition = createCarPositionTracker(trackState.checkpoints);
+
+    robotCars = [
+        createRobotCar(scene, trackState, 0x00ff00, -3, 29),
+        createRobotCar(scene, trackState, 0x0000ff, -6, 27),
+    ];
+
     updateLoadingProgress(1.0);
 
     window.addEventListener('resize', onWindowResize);
@@ -190,21 +200,65 @@ function animate() {
         elapsedTotal += deltaTime;
 
         // Update car physics
-        if (carState && trackState) {
+        if (carState && trackState && playerPosition) {
             updateCar(carState, deltaTime, trackState);
-            updateTrack(trackState, carState, deltaTime);
+            
+            const otherCarsForCollision = robotCars.map(r => ({
+                x: r.group.position.x,
+                z: r.group.position.z,
+            }));
+            
+            for (const robot of robotCars) {
+                updateRobotCar(robot, trackState, deltaTime, [
+                    { x: carState.mesh.position.x, z: carState.mesh.position.z },
+                    ...otherCarsForCollision.filter(c => c.x !== robot.group.position.x),
+                ]);
+            }
 
-            // Update camera to follow car (first-person cockpit view)
+            for (const robot of robotCars) {
+                const px = carState.mesh.position.x;
+                const pz = carState.mesh.position.z;
+                const rx = robot.group.position.x;
+                const rz = robot.group.position.z;
+                const dx = rx - px;
+                const dz = rz - pz;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+
+                if (dist < 3.5 && dist > 0) {
+                    const pushDx = (dx / dist) * (3.5 - dist) * 0.5;
+                    const pushDz = (dz / dist) * (3.5 - dist) * 0.5;
+                    carState.mesh.position.x -= pushDx;
+                    carState.mesh.position.z -= pushDz;
+                    robot.group.position.x += pushDx;
+                    robot.group.position.z += pushDz;
+                    carState.speed *= 0.6;
+                }
+            }
+
+            updateTrack(trackState, carState, playerPosition, deltaTime);
+
             updateCamera();
 
-            // Check for lap completion
             if (trackState.currentLap > state.currentLap) {
                 handleLapComplete(trackState);
             }
 
-            // Check for race finish
             if (trackState.raceFinished && !state.raceFinished) {
                 handleRaceFinish(trackState);
+            }
+
+            let playerPositionRank = 1;
+            const totalRacers = 1 + robotCars.length;
+            for (const robot of robotCars) {
+                if (robot.carPosition.progress > playerPosition.progress) {
+                    playerPositionRank++;
+                }
+            }
+            updateState('position', playerPositionRank);
+            
+            const posDisplay = document.getElementById('position-display');
+            if (posDisplay) {
+                posDisplay.textContent = `${playerPositionRank}/${totalRacers}`;
             }
         }
 
@@ -347,6 +401,13 @@ function resetForNextRace() {
     if (trackState && carState) {
         resetTrack(trackState);
         resetCar(carState, trackState);
+        
+        playerPosition = createCarPositionTracker(trackState.checkpoints);
+        
+        robotCars.forEach((robot, i) => {
+            const offset = i === 0 ? -3 : -6;
+            resetRobotCar(robot, trackState!, offset);
+        });
     }
 
     openModal('intro-modal');
