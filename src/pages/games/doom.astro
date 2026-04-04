@@ -7,17 +7,25 @@ import Layout from '../../layouts/Layout.astro';
     <div id="game-canvas-container"></div>
     <div id="ui-layer">
       <div id="crosshair"></div>
+      <div id="hud">
+        <div id="health-bar-container">
+          <div id="health-bar"></div>
+          <span id="health-text">100</span>
+        </div>
+        <div id="bot-count"><span id="bot-alive">0</span> enemies</div>
+      </div>
       <header class="game-header">
         <div class="header-left">
-          <a href="/" class="back-btn" aria-label="Exit"><span class="back-icon">←</span><span class="back-text">Exit</span></a>
+          <a href="/" class="back-btn" aria-label="Exit"><span class="back-icon">←</span><span class="back-text"> Exit</span></a>
         </div>
         <div class="header-center"><h1 class="target-title">SECTOR 7 ARENA</h1></div>
         <div class="header-right"><span class="status-indicator"><span class="dot"></span> Online</span></div>
       </header>
+      <div id="hit-indicator"></div>
       <div id="blocker" class="blocker visible">
         <div class="modal-window">
           <h2>Sector 7 Arena</h2>
-          <p class="modal-desc">Close-quarters combat zone. Multiplayer ready.</p>
+          <p class="modal-desc">Eliminate all hostiles. Survive.</p>
           <ul class="controls-list">
             <li><strong>WASD</strong> move</li>
             <li><strong>Mouse</strong> look</li>
@@ -39,7 +47,7 @@ import Layout from '../../layouts/Layout.astro';
         concrete: { base: 0xC4B8A8, dark: 0x9B8F7E, light: 0xE8DDD0, weathered: 0xA69A89 },
         rust: { base: 0xB87050, dark: 0x8B4F35, light: 0xD99575 },
         copper: { base: 0xE8A060, glow: 0xFFC490, dark: 0xC47A35 },
-        moss: { base: 0x6B7B4C, dark: 0x4A5A35 }
+        enemy: { base: 0x8B3030, glow: 0xFF4444 }
     };
 
     // === SETUP ===
@@ -73,46 +81,58 @@ import Layout from '../../layouts/Layout.astro';
     controls.addEventListener('unlock', () => blocker?.classList.add('visible'));
     scene.add(controls.object);
 
-    // === AUDIO - Minimal Sharp Gun Sound ===
+    // === AUDIO ===
     let audioCtx;
-    function initAudio() {
-        if (audioCtx) return;
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
+    function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
 
     function playShoot() {
         if (!audioCtx || audioCtx.state !== 'running') return;
         const now = audioCtx.currentTime;
-        
-        // Sharp metallic crack - very short
         const osc = audioCtx.createOscillator();
         osc.type = 'square';
         osc.frequency.setValueAtTime(180, now);
         osc.frequency.exponentialRampToValueAtTime(40, now + 0.04);
-        
         const noise = audioCtx.createOscillator();
         noise.type = 'sawtooth';
         noise.frequency.setValueAtTime(800, now);
         noise.frequency.exponentialRampToValueAtTime(100, now + 0.03);
-        
         const filter = audioCtx.createBiquadFilter();
         filter.type = 'highpass';
         filter.frequency.value = 400;
         filter.Q.value = 2;
-        
         const gain = audioCtx.createGain();
         gain.gain.setValueAtTime(0.35, now);
         gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
-        
-        osc.connect(filter);
-        noise.connect(filter);
-        filter.connect(gain);
-        gain.connect(audioCtx.destination);
-        
-        osc.start(now);
-        noise.start(now);
-        osc.stop(now + 0.08);
-        noise.stop(now + 0.08);
+        osc.connect(filter); noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(now); noise.start(now); osc.stop(now + 0.08); noise.stop(now + 0.08);
+    }
+
+    function playEnemyShoot() {
+        if (!audioCtx || audioCtx.state !== 'running') return;
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(120, now);
+        osc.frequency.exponentialRampToValueAtTime(30, now + 0.08);
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(now); osc.stop(now + 0.1);
+    }
+
+    function playHit() {
+        if (!audioCtx || audioCtx.state !== 'running') return;
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(300, now);
+        osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(now); osc.stop(now + 0.15);
     }
 
     function playJump() {
@@ -125,10 +145,8 @@ import Layout from '../../layouts/Layout.astro';
         const gain = audioCtx.createGain();
         gain.gain.setValueAtTime(0.06, now);
         gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start(now);
-        osc.stop(now + 0.2);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(now); osc.stop(now + 0.2);
     }
 
     // === MATERIALS ===
@@ -142,13 +160,15 @@ import Layout from '../../layouts/Layout.astro';
             new THREE.MeshStandardMaterial({ color: PALETTE.rust.base, roughness: 0.8, metalness: 0.4 }),
             new THREE.MeshStandardMaterial({ color: PALETTE.rust.dark, roughness: 0.85, metalness: 0.35 })
         ],
-        copper: new THREE.MeshStandardMaterial({ color: PALETTE.copper.base, emissive: PALETTE.copper.glow, emissiveIntensity: 1.5, roughness: 0.3, metalness: 0.9 })
+        copper: new THREE.MeshStandardMaterial({ color: PALETTE.copper.base, emissive: PALETTE.copper.glow, emissiveIntensity: 1.5, roughness: 0.3, metalness: 0.9 }),
+        enemy: new THREE.MeshStandardMaterial({ color: PALETTE.enemy.base, roughness: 0.7, metalness: 0.3 })
     };
 
     // === COLLISION ===
     const collisionBoxes = [];
-
     function addBox(mesh) { collisionBoxes.push(new THREE.Box3().setFromObject(mesh)); }
+    const raycaster = new THREE.Raycaster();
+    const BOT_RADIUS = 0.4;
     
     function wall(x, z, w, d, h, material = mat.concrete[0]) {
         const geo = new THREE.BoxGeometry(w, h, d);
@@ -161,9 +181,7 @@ import Layout from '../../layouts/Layout.astro';
         return mesh;
     }
     
-    function halfWall(x, z, w, d, material = mat.concrete[1]) {
-        return wall(x, z, w, d, 1.0, material);
-    }
+    function halfWall(x, z, w, d, material = mat.concrete[1]) { return wall(x, z, w, d, 1.0, material); }
     
     function pillar(x, z, size = 0.8, height = 4) {
         const geo = new THREE.BoxGeometry(size, height, size);
@@ -216,7 +234,7 @@ import Layout from '../../layouts/Layout.astro';
     let recoilPos = 0, recoilVel = 0, recoilTarget = 0;
     const RECOIL_K = 1400, RECOIL_D = 40;
 
-    // === MAP: MULTIPLAYER ARENA ===
+    // === MAP ===
     const MAP_SIZE = 50;
     const WALL_H = 4.5;
     const CORRIDOR_W = 3.5;
@@ -242,172 +260,106 @@ import Layout from '../../layouts/Layout.astro';
     wall(-MAP_SIZE, 0, 1, MAP_SIZE * 2, WALL_H);
     wall(MAP_SIZE, 0, 1, MAP_SIZE * 2, WALL_H);
 
-    // === CENTRAL HUB (Cross-shaped with cover) ===
-    // Central pillar cluster
+    // Central hub
     pillar(-2, -2, 1.2, 3);
     pillar(2, -2, 1.2, 3);
     pillar(-2, 2, 1.2, 3);
     pillar(2, 2, 1.2, 3);
-
-    // Central cover boxes
     wall(0, 0, 2, 2, 1.2, mat.rust[0]);
     wall(-6, 0, 1.5, 6, 1.0, mat.concrete[1]);
     wall(6, 0, 1.5, 6, 1.0, mat.concrete[1]);
     wall(0, -6, 6, 1.5, 1.0, mat.concrete[1]);
     wall(0, 6, 6, 1.5, 1.0, mat.concrete[1]);
 
-    // Corridors from center
-    // North corridor
+    // Corridors
     wall(-CORRIDOR_W/2, -12, 1, 14, WALL_H);
     wall(CORRIDOR_W/2, -12, 1, 14, WALL_H);
-
-    // South corridor  
     wall(-CORRIDOR_W/2, 12, 1, 14, WALL_H);
     wall(CORRIDOR_W/2, 12, 1, 14, WALL_H);
-
-    // East corridor
     wall(12, -CORRIDOR_W/2, 14, 1, WALL_H);
     wall(12, CORRIDOR_W/2, 14, 1, WALL_H);
-
-    // West corridor
     wall(-12, -CORRIDOR_W/2, 14, 1, WALL_H);
     wall(-12, CORRIDOR_W/2, 14, 1, WALL_H);
 
-    // === NORTH COMPLEX (2 rooms connected) ===
+    // Room structures
     function buildNorthComplex() {
         const baseZ = -25;
-        
-        // Outer walls
         wall(0, baseZ - 7, ROOM_W * 2 + 2, 1, WALL_H);
         wall(-ROOM_W - 1, baseZ, 1, 14, WALL_H);
         wall(ROOM_W + 1, baseZ, 1, 14, WALL_H);
-        
-        // Inner divider with doorway
         wall(-2, baseZ, 1, 8, WALL_H);
         wall(4, baseZ, 1, 8, WALL_H);
-        
-        // Room furniture/cover
         wall(-ROOM_W, baseZ - 3, 2, 2, 1.0, mat.rust[1]);
         wall(-ROOM_W, baseZ + 3, 1, 3, 1.2, mat.concrete[2]);
-        wall(ROOM_W, baseZ - 2, 3, 1.5, 0.8, mat.rust[0]);
-        
-        // Entry corridor cover
         halfWall(0, baseZ + 5, 2, 2, mat.concrete[1]);
-        
-        // Barrels
         createBarrel(-ROOM_W + 2, baseZ - 4, true);
         createBarrel(ROOM_W - 3, baseZ + 2, false);
     }
 
-    // === SOUTH COMPLEX ===
     function buildSouthComplex() {
         const baseZ = 25;
-        
         wall(0, baseZ + 7, ROOM_W * 2 + 2, 1, WALL_H);
         wall(-ROOM_W - 1, baseZ, 1, 14, WALL_H);
         wall(ROOM_W + 1, baseZ, 1, 14, WALL_H);
-        
         wall(-3, baseZ, 1.5, 10, WALL_H);
         wall(5, baseZ, 1.5, 10, WALL_H);
-        
         halfWall(-ROOM_W + 1, baseZ - 2, 1.5, 2, mat.rust[1]);
         wall(ROOM_W, baseZ + 2, 2.5, 2, 1.0, mat.concrete[2]);
-        
         createBarrel(ROOM_W - 2, baseZ - 3, true);
         createBarrel(-ROOM_W + 3, baseZ + 1, false);
     }
 
-    // === EAST WING ===
     function buildEastWing() {
         const baseX = 25;
-        
         wall(baseX + 7, 0, 1, ROOM_W * 2 + 2, WALL_H);
         wall(baseX, -ROOM_W - 1, 14, 1, WALL_H);
         wall(baseX, ROOM_W + 1, 14, 1, WALL_H);
-        
-        // Vertical divider
         wall(baseX, -2, 1, 5, WALL_H);
         wall(baseX, 4, 1, 5, WALL_H);
-        
-        // Cover
         halfWall(baseX - 3, -ROOM_W, 2, 2, mat.rust[0]);
         wall(baseX + 2, ROOM_W, 2, 2.5, 0.9, mat.concrete[1]);
         pillar(baseX - 2, ROOM_W - 2, 0.9, 2.5);
-        
         createBarrel(baseX + 3, -ROOM_W + 2, true);
     }
 
-    // === WEST WING ===
     function buildWestWing() {
         const baseX = -25;
-        
         wall(baseX - 7, 0, 1, ROOM_W * 2 + 2, WALL_H);
         wall(baseX, -ROOM_W - 1, 14, 1, WALL_H);
         wall(baseX, ROOM_W + 1, 14, 1, WALL_H);
-        
         wall(baseX, -3, 1, 6, WALL_H);
         wall(baseX, 5, 1, 6, WALL_H);
-        
         halfWall(baseX + 2, -ROOM_W + 1, 1.5, 2.5, mat.rust[1]);
         wall(baseX - 2, ROOM_W - 2, 2, 2, 0.8, mat.concrete[2]);
-        
         createBarrel(baseX - 3, ROOM_W - 3, true);
         createBarrel(baseX + 1, 2, false);
     }
 
-    // === CORNER BUNKERS (Spawn areas) ===
-    function buildBunker(x, z, rotY) {
-        const group = new THREE.Group();
-        
-        // U-shaped bunker
+    function buildBunker(x, z) {
         halfWall(x - 2, z, 0.5, 5, mat.rust[0]);
         halfWall(x + 2, z, 0.5, 5, mat.rust[0]);
         halfWall(x, z - 2, 5, 0.5, mat.rust[0]);
-        
-        // Corner pillars
         pillar(x - 3, z - 3, 0.6, 2);
         pillar(x + 3, z - 3, 0.6, 2);
-        
-        // Ammo crate
-        const crate = new THREE.Mesh(
-            new THREE.BoxGeometry(1.2, 0.8, 0.8),
-            mat.concrete[1]
-        );
+        const crate = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.8, 0.8), mat.concrete[1]);
         crate.position.set(x, 0.4, z + 1);
-        crate.rotation.y = rotY + 0.3;
+        crate.rotation.y = 0.3;
         crate.castShadow = true;
         scene.add(crate);
-        
-        return group;
     }
 
-    // 4 corner bunkers
-    buildBunker(-42, -42, 0);
-    buildBunker(42, -42, 0);
-    buildBunker(-42, 42, 0);
-    buildBunker(42, 42, 0);
-
-    // === COVER THROUGHOUT CORRIDORS ===
     function addCorridorCover() {
-        // North passage
         halfWall(0, -18, 1.5, 1.5, mat.concrete[1]);
         pillar(-1.5, -15, 0.7, 2.5);
         pillar(1.5, -15, 0.7, 2.5);
-        
-        // South passage
         halfWall(0, 18, 1.5, 1.5, mat.concrete[1]);
-        
-        // East passage
         halfWall(18, 0, 1.5, 1.5, mat.rust[0]);
         pillar(15, -1.5, 0.7, 2.5);
         pillar(15, 1.5, 0.7, 2.5);
-        
-        // West passage
         halfWall(-18, 0, 1.5, 1.5, mat.rust[0]);
         createBarrel(-15, 2, true);
     }
 
-    // === SCATTERED COVER ELEMENTS ===
     function createBarrel(x, z, glowing) {
         const geo = new THREE.CylinderGeometry(0.35, 0.4, 1.1, 10);
         const m = glowing ? mat.copper : mat.rust[Math.floor(Math.random() * 2)];
@@ -417,7 +369,6 @@ import Layout from '../../layouts/Layout.astro';
         barrel.receiveShadow = true;
         scene.add(barrel);
         addBox(barrel);
-        
         if (glowing) {
             const light = new THREE.PointLight(PALETTE.copper.glow, 1.0, 6);
             light.position.set(x, 1.5, z);
@@ -426,10 +377,7 @@ import Layout from '../../layouts/Layout.astro';
     }
 
     function createCrate(x, z, w, h, d) {
-        const crate = new THREE.Mesh(
-            new THREE.BoxGeometry(w, h, d),
-            mat.concrete[Math.floor(Math.random() * 3)]
-        );
+        const crate = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat.concrete[Math.floor(Math.random() * 3)]);
         crate.position.set(x, h/2, z);
         crate.rotation.y = Math.random() * 0.4 - 0.2;
         crate.castShadow = true;
@@ -439,10 +387,7 @@ import Layout from '../../layouts/Layout.astro';
     }
 
     function createLongCover(x, z, len, angle = 0) {
-        const cover = new THREE.Mesh(
-            new THREE.BoxGeometry(len, 1.0, 0.6),
-            mat.concrete[1]
-        );
+        const cover = new THREE.Mesh(new THREE.BoxGeometry(len, 1.0, 0.6), mat.concrete[1]);
         cover.position.set(x, 0.5, z);
         cover.rotation.y = angle;
         cover.castShadow = true;
@@ -451,36 +396,30 @@ import Layout from '../../layouts/Layout.astro';
         addBox(cover);
     }
 
-    // Build structures
     buildNorthComplex();
     buildSouthComplex();
     buildEastWing();
     buildWestWing();
+    buildBunker(-42, -42);
+    buildBunker(42, -42);
+    buildBunker(-42, 42);
+    buildBunker(42, 42);
     addCorridorCover();
-
-    // Additional cover in open areas
     createLongCover(-20, -10, 4, 0.3);
     createLongCover(20, 10, 4, -0.2);
     createLongCover(-10, 20, 3, 0.5);
     createLongCover(10, -20, 3, -0.4);
 
-    // Crates scattered
     for (let i = 0; i < 25; i++) {
         const angle = Math.random() * Math.PI * 2;
         const dist = 8 + Math.random() * 35;
         const x = Math.cos(angle) * dist;
         const z = Math.sin(angle) * dist;
-        
-        // Don't place in corridors
         if (Math.abs(x) < 4 && Math.abs(z) > 10) continue;
         if (Math.abs(z) < 4 && Math.abs(x) > 10) continue;
-        
-        const w = 0.7 + Math.random() * 0.8;
-        const h = 0.6 + Math.random() * 0.6;
-        createCrate(x, z, w, h, w);
+        createCrate(x, z, 0.7 + Math.random() * 0.8, 0.6 + Math.random() * 0.6, 0.7 + Math.random() * 0.8);
     }
 
-    // Barrels scattered
     for (let i = 0; i < 12; i++) {
         const angle = Math.random() * Math.PI * 2;
         const dist = 10 + Math.random() * 30;
@@ -491,9 +430,7 @@ import Layout from '../../layouts/Layout.astro';
     }
 
     // === LIGHTING ===
-    const ambientLight = new THREE.AmbientLight(0xE8D4B8, 0.45);
-    scene.add(ambientLight);
-
+    scene.add(new THREE.AmbientLight(0xE8D4B8, 0.45));
     const sunLight = new THREE.DirectionalLight(0xFFD4A8, 1.0);
     sunLight.position.set(-25, 40, -15);
     sunLight.castShadow = true;
@@ -507,24 +444,369 @@ import Layout from '../../layouts/Layout.astro';
     sunLight.shadow.camera.bottom = -60;
     sunLight.shadow.bias = -0.0003;
     scene.add(sunLight);
-
-    const rimLight = new THREE.DirectionalLight(0xB8C8E8, 0.2);
-    rimLight.position.set(30, 20, 25);
-    scene.add(rimLight);
-
-    // Copper lights in key areas
-    const lightPositions = [
-        [0, 4.5], [-25, 0], [25, 0], [0, -25], [0, 25],
-        [-20, -20], [20, -20], [-20, 20], [20, 20]
-    ];
-    lightPositions.forEach(([x, z]) => {
+    scene.add(new THREE.DirectionalLight(0xB8C8E8, 0.2));
+    
+    [[0, 4.5], [-25, 0], [25, 0], [0, -25], [0, 25], [-20, -20], [20, -20], [-20, 20], [20, 20]].forEach(([x, z]) => {
         const light = new THREE.PointLight(PALETTE.copper.glow, 0.8, 12);
         light.position.set(x, 3, z);
         scene.add(light);
     });
 
+    // === PLAYER HEALTH ===
+    let playerHealth = 100;
+    const MAX_HEALTH = 100;
+
+    function updateHealthUI() {
+        const bar = document.getElementById('health-bar');
+        const text = document.getElementById('health-text');
+        if (bar) bar.style.width = `${playerHealth}%`;
+        if (text) text.textContent = Math.max(0, Math.floor(playerHealth));
+    }
+
+    function damagePlayer(amount) {
+        playerHealth -= amount;
+        updateHealthUI();
+        playHit();
+        if (playerHealth <= 0) {
+            playerHealth = MAX_HEALTH;
+            updateHealthUI();
+            camera.position.set(0, 1.6, 20);
+        }
+    }
+
+    function showHitIndicator(hitDir) {
+        const lookDir = new THREE.Vector3();
+        camera.getWorldDirection(lookDir);
+        lookDir.y = 0;
+        lookDir.normalize();
+
+        const rightDir = new THREE.Vector3().crossVectors(lookDir, new THREE.Vector3(0, 1, 0)).normalize();
+        const dotRight = hitDir.dot(rightDir);
+        const dotForward = hitDir.dot(lookDir);
+
+        const indicator = document.getElementById('hit-indicator');
+        if (!indicator) return;
+
+        let angle = Math.atan2(-dotRight, -dotForward) * (180 / Math.PI);
+        const isLeft = Math.abs(dotRight) > Math.abs(dotForward) && dotRight < 0;
+        const isRight = Math.abs(dotRight) > Math.abs(dotForward) && dotRight > 0;
+        const isBack = dotForward < 0 && Math.abs(dotForward) > Math.abs(dotRight);
+
+        let edge = 'center';
+        if (isBack) {
+            if (dotRight < 0) { angle = 135; edge = 'left'; }
+            else if (dotRight > 0) { angle = -135; edge = 'right'; }
+            else { angle = 180; edge = 'center'; }
+        } else if (isLeft) {
+            edge = 'left';
+        } else if (isRight) {
+            edge = 'right';
+        }
+
+        indicator.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 40;
+            background: radial-gradient(ellipse at ${edge} 50%, rgba(200,30,30,0.35) 0%, rgba(200,30,30,0.12) 25%, transparent 55%);
+            opacity: 1;
+            transition: none;
+        `;
+
+        setTimeout(() => {
+            indicator.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                pointer-events: none; z-index: 40;
+                background: radial-gradient(ellipse at ${edge} 50%, rgba(200,30,30,0.35) 0%, rgba(200,30,30,0.12) 25%, transparent 55%);
+                opacity: 0;
+                transition: opacity 0.5s ease-out;
+            `;
+        }, 80);
+
+        setTimeout(() => {
+            indicator.style.opacity = '0';
+        }, 600);
+    }
+
+    // === BOTS ===
+    const bots = [];
+    const BOT_COUNT = 5;
+    const BOT_HEALTH = 100;
+    const BOT_SPEED = 2.5;
+    const BOT_SHOOT_INTERVAL = 2000;
+    const BOT_ACCURACY = 0.85;
+
+    function createBot(x, z) {
+        const group = new THREE.Group();
+
+        // Torso - box geometry for humanoid shape
+        const torsoGeo = new THREE.BoxGeometry(0.7, 1.0, 0.4);
+        const torso = new THREE.Mesh(torsoGeo, mat.enemy);
+        torso.position.y = 1.0;
+        torso.castShadow = true;
+        group.add(torso);
+
+        // Chest plate detail
+        const chestGeo = new THREE.BoxGeometry(0.5, 0.5, 0.1);
+        const chestMat = new THREE.MeshStandardMaterial({ color: PALETTE.rust.dark, roughness: 0.6, metalness: 0.5 });
+        const chest = new THREE.Mesh(chestGeo, chestMat);
+        chest.position.set(0, 1.1, 0.22);
+        chest.castShadow = true;
+        group.add(chest);
+
+        // Head - larger, more detailed
+        const headGeo = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+        const head = new THREE.Mesh(headGeo, mat.enemy);
+        head.position.y = 1.8;
+        head.castShadow = true;
+        group.add(head);
+
+        // Visor
+        const visorGeo = new THREE.BoxGeometry(0.35, 0.12, 0.1);
+        const visorMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.2, metalness: 0.8 });
+        const visor = new THREE.Mesh(visorGeo, visorMat);
+        visor.position.set(0, 1.82, 0.22);
+        group.add(visor);
+
+        // Glowing eyes behind visor
+        const eyeMat = new THREE.MeshStandardMaterial({ color: PALETTE.enemy.glow, emissive: PALETTE.enemy.glow, emissiveIntensity: 3 });
+        const eye1 = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), eyeMat);
+        eye1.position.set(-0.1, 1.82, 0.26);
+        group.add(eye1);
+        const eye2 = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), eyeMat);
+        eye2.position.set(0.1, 1.82, 0.26);
+        group.add(eye2);
+
+        // Shoulder pads
+        const shoulderGeo = new THREE.SphereGeometry(0.18, 8, 6);
+        const shoulderMat = new THREE.MeshStandardMaterial({ color: PALETTE.rust.base, roughness: 0.7, metalness: 0.4 });
+        const lShoulder = new THREE.Mesh(shoulderGeo, shoulderMat);
+        lShoulder.position.set(-0.45, 1.5, 0);
+        lShoulder.castShadow = true;
+        group.add(lShoulder);
+        const rShoulder = new THREE.Mesh(shoulderGeo, shoulderMat);
+        rShoulder.position.set(0.45, 1.5, 0);
+        rShoulder.castShadow = true;
+        group.add(rShoulder);
+
+        // Arms
+        const armGeo = new THREE.CylinderGeometry(0.1, 0.12, 0.8, 8);
+        const lArm = new THREE.Mesh(armGeo, mat.enemy);
+        lArm.position.set(-0.52, 0.9, 0);
+        lArm.castShadow = true;
+        group.add(lArm);
+        const rArm = new THREE.Mesh(armGeo, mat.enemy);
+        rArm.position.set(0.52, 0.9, 0);
+        rArm.castShadow = true;
+        group.add(rArm);
+
+        // Legs
+        const legGeo = new THREE.CylinderGeometry(0.12, 0.14, 0.8, 8);
+        const lLeg = new THREE.Mesh(legGeo, mat.enemy);
+        lLeg.position.set(-0.18, 0.15, 0);
+        lLeg.castShadow = true;
+        group.add(lLeg);
+        const rLeg = new THREE.Mesh(legGeo, mat.enemy);
+        rLeg.position.set(0.18, 0.15, 0);
+        rLeg.castShadow = true;
+        group.add(rLeg);
+
+        // Gun in hand
+        const gunGroup = new THREE.Group();
+        const gunBody = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.35), new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.4, metalness: 0.7 }));
+        gunBody.position.z = 0.18;
+        gunGroup.add(gunBody);
+        const gunBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.25, 8), new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness: 0.8, roughness: 0.3 }));
+        gunBarrel.rotation.x = Math.PI / 2;
+        gunBarrel.position.z = 0.38;
+        gunGroup.add(gunBarrel);
+        const gunGlow = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6), new THREE.MeshStandardMaterial({ color: PALETTE.enemy.glow, emissive: PALETTE.enemy.glow, emissiveIntensity: 1 }));
+        gunGlow.position.z = 0.42;
+        gunGroup.add(gunGlow);
+        gunGroup.position.set(0.52, 0.7, 0.1);
+        group.add(gunGroup);
+
+        // Health bar
+        const healthBarGeo = new THREE.PlaneGeometry(0.8, 0.08);
+        const healthBarMat = new THREE.MeshBasicMaterial({ color: 0x00FF00, side: THREE.DoubleSide });
+        const healthBar = new THREE.Mesh(healthBarGeo, healthBarMat);
+        healthBar.position.y = 2.4;
+        group.add(healthBar);
+
+        // Health bar background
+        const bgBarGeo = new THREE.PlaneGeometry(0.8, 0.08);
+        const bgBarMat = new THREE.MeshBasicMaterial({ color: 0x222222, side: THREE.DoubleSide });
+        const bgBar = new THREE.Mesh(bgBarGeo, bgBarMat);
+        bgBar.position.y = 2.4;
+        bgBar.position.z = -0.01;
+        group.add(bgBar);
+
+        group.position.set(x, 0, z);
+        scene.add(group);
+
+        const bot = {
+            mesh: group,
+            health: BOT_HEALTH,
+            maxHealth: BOT_HEALTH,
+            lastShot: 0,
+            velocity: new THREE.Vector3(),
+            target: null,
+            state: 'patrol',
+            patrolTarget: new THREE.Vector3(x + (Math.random() - 0.5) * 20, 0, z + (Math.random() - 0.5) * 20),
+            parts: { torso, head, lArm, rArm, lLeg, rLeg, lShoulder, rShoulder }
+        };
+
+        bots.push(bot);
+        return bot;
+    }
+
+    function hasLineOfSight(from, to) {
+        const dir = new THREE.Vector3().subVectors(to, from).normalize();
+        const dist = from.distanceTo(to);
+        raycaster.set(from, dir);
+        raycaster.far = dist;
+        const hits = raycaster.intersectObjects(scene.children, true);
+        if (hits.length === 0) return true;
+        const closest = hits[0];
+        if (closest.distance >= dist - 0.1) return true;
+        const hitPos = closest.point;
+        const playerCenter = new THREE.Vector3(camera.position.x, 1.0, camera.position.z);
+        if (hitPos.distanceTo(playerCenter) < 0.8) return true;
+        return false;
+    }
+
+    function moveBotWithCollision(bot, dx, dz, delta) {
+        const newX = bot.mesh.position.x + dx;
+        const newZ = bot.mesh.position.z + dz;
+
+        const testBoxX = new THREE.Box3(
+            new THREE.Vector3(newX - BOT_RADIUS, 0, bot.mesh.position.z - BOT_RADIUS),
+            new THREE.Vector3(newX + BOT_RADIUS, 2.0, bot.mesh.position.z + BOT_RADIUS)
+        );
+        let blockedX = false;
+        for (const box of collisionBoxes) {
+            if (testBoxX.intersectsBox(box)) { blockedX = true; break; }
+        }
+        if (!blockedX) bot.mesh.position.x = newX;
+
+        const testBoxZ = new THREE.Box3(
+            new THREE.Vector3(bot.mesh.position.x - BOT_RADIUS, 0, newZ - BOT_RADIUS),
+            new THREE.Vector3(bot.mesh.position.x + BOT_RADIUS, 2.0, newZ + BOT_RADIUS)
+        );
+        let blockedZ = false;
+        for (const box of collisionBoxes) {
+            if (testBoxZ.intersectsBox(box)) { blockedZ = true; break; }
+        }
+        if (!blockedZ) bot.mesh.position.z = newZ;
+    }
+
+    function updateBotAI(bot, delta, time) {
+        const playerPos = camera.position;
+        const distToPlayer = bot.mesh.position.distanceTo(playerPos);
+
+        const dirToPlayer = new THREE.Vector3().subVectors(playerPos, bot.mesh.position).normalize();
+        bot.mesh.rotation.y = Math.atan2(dirToPlayer.x, dirToPlayer.z);
+
+        if (distToPlayer < 35) {
+            bot.state = 'chase';
+        } else {
+            bot.state = 'patrol';
+        }
+
+        if (bot.state === 'chase') {
+            const moveDir = new THREE.Vector3(dirToPlayer.x, 0, dirToPlayer.z);
+            bot.velocity.set(moveDir.x * BOT_SPEED, 0, moveDir.z * BOT_SPEED);
+            moveBotWithCollision(bot, bot.velocity.x * delta, bot.velocity.z * delta, delta);
+
+            if (time - bot.lastShot > BOT_SHOOT_INTERVAL && distToPlayer < 25) {
+                const eyePos = new THREE.Vector3(bot.mesh.position.x, 1.5, bot.mesh.position.z);
+                const playerEyePos = new THREE.Vector3(playerPos.x, 1.6, playerPos.z);
+                if (hasLineOfSight(eyePos, playerEyePos)) {
+                    bot.lastShot = time;
+                    if (Math.random() < BOT_ACCURACY) {
+                        playEnemyShoot();
+                        const flatDir = new THREE.Vector3(dirToPlayer.x, 0, dirToPlayer.z).normalize();
+                        const origin = new THREE.Vector3(bot.mesh.position.x, 1.4, bot.mesh.position.z);
+                        const ep = createEnemyProjectile(origin, flatDir);
+                        enemyProjectiles.push({
+                            mesh: ep.mesh,
+                            trail: ep.trail,
+                            trailLen: ep.trailLen,
+                            dir: flatDir,
+                            origin,
+                            life: 2.0
+                        });
+                    }
+                }
+            }
+        } else {
+            const toTarget = new THREE.Vector3().subVectors(bot.patrolTarget, bot.mesh.position);
+            if (toTarget.length() < 2) {
+                bot.patrolTarget.set(
+                    bot.mesh.position.x + (Math.random() - 0.5) * 30,
+                    0,
+                    bot.mesh.position.z + (Math.random() - 0.5) * 30
+                );
+            }
+            toTarget.normalize();
+            bot.velocity.set(toTarget.x * BOT_SPEED * 0.5, 0, toTarget.z * BOT_SPEED * 0.5);
+            moveBotWithCollision(bot, bot.velocity.x * delta, bot.velocity.z * delta, delta);
+        }
+    }
+
+    function createEnemyProjectile(pos, dir) {
+        const group = new THREE.Group();
+
+        // Core bright sphere
+        const coreGeo = new THREE.SphereGeometry(0.06, 8, 8);
+        const coreMat = new THREE.MeshStandardMaterial({ color: PALETTE.enemy.glow, emissive: PALETTE.enemy.glow, emissiveIntensity: 4 });
+        const core = new THREE.Mesh(coreGeo, coreMat);
+        group.add(core);
+
+        // Outer glow
+        const glowGeo = new THREE.SphereGeometry(0.12, 8, 8);
+        const glowMat = new THREE.MeshBasicMaterial({ color: PALETTE.enemy.glow, transparent: true, opacity: 0.25 });
+        const glow = new THREE.Mesh(glowGeo, glowMat);
+        group.add(glow);
+
+        // Tracer trail line
+        const trailPositions = new Float32Array(6);
+        const trailGeo = new THREE.BufferGeometry();
+        trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
+        const trailMat = new THREE.LineBasicMaterial({ color: PALETTE.enemy.glow, transparent: true, opacity: 0.6 });
+        const trail = new THREE.Line(trailGeo, trailMat);
+        scene.add(trail);
+
+        // Point light for dynamic illumination
+        const pLight = new THREE.PointLight(PALETTE.enemy.glow, 1.0, 5);
+        group.add(pLight);
+
+        group.position.copy(pos);
+        group.position.y = 1.4;
+        scene.add(group);
+
+        return { mesh: group, trail, trailLen: 0.8 };
+    }
+
+    // Spawn bots
+    function spawnBots() {
+        const spawnPoints = [
+            [-30, -30], [30, -30], [-30, 30], [30, 30],
+            [-15, -35], [15, -35], [-35, -15], [35, 15]
+        ];
+        for (let i = 0; i < BOT_COUNT; i++) {
+            const sp = spawnPoints[i % spawnPoints.length];
+            createBot(sp[0] + (Math.random() - 0.5) * 5, sp[1] + (Math.random() - 0.5) * 5);
+        }
+        updateBotCountUI();
+    }
+
+    function updateBotCountUI() {
+        const countEl = document.getElementById('bot-alive');
+        if (countEl) countEl.textContent = bots.length;
+    }
+
     // === PROJECTILES ===
     const projectiles = [];
+    const enemyProjectiles = [];
 
     document.addEventListener('mousedown', (e) => {
         if (!controls.isLocked || e.button !== 0) return;
@@ -533,23 +815,23 @@ import Layout from '../../layouts/Layout.astro';
         muzzleFlash.intensity = 2.5;
         setTimeout(() => muzzleFlash.intensity = 0, 40);
 
-        const proj = new THREE.Mesh(
-            new THREE.SphereGeometry(0.05, 8, 8),
-            new THREE.MeshStandardMaterial({ color: PALETTE.copper.glow, emissive: PALETTE.copper.glow, emissiveIntensity: 3, roughness: 0.2, metalness: 0.8 })
-        );
-
         const spawnPos = new THREE.Vector3();
         barrel.getWorldPosition(spawnPos);
-        proj.position.copy(spawnPos);
-
+        
         const dir = new THREE.Vector3();
         camera.getWorldDirection(dir);
 
+        const proj = new THREE.Mesh(
+            new THREE.SphereGeometry(0.05, 8, 8),
+            new THREE.MeshStandardMaterial({ color: PALETTE.copper.glow, emissive: PALETTE.copper.glow, emissiveIntensity: 3 })
+        );
+        proj.position.copy(spawnPos);
+        
         const pLight = new THREE.PointLight(PALETTE.copper.glow, 1.5, 8);
         proj.add(pLight);
 
         scene.add(proj);
-        projectiles.push({ mesh: proj, dir: dir, life: 1.2 });
+        projectiles.push({ mesh: proj, dir: dir.clone(), life: 1.2 });
     });
 
     // === PHYSICS ===
@@ -599,6 +881,9 @@ import Layout from '../../layouts/Layout.astro';
         return false;
     }
 
+    // Start game
+    spawnBots();
+
     function animate() {
         requestAnimationFrame(animate);
         const time = performance.now();
@@ -606,22 +891,118 @@ import Layout from '../../layouts/Layout.astro';
         if (controls.isLocked) {
             const delta = Math.min((time - prevTime) / 1000, 0.1);
 
-            // Recoil spring
+            // Recoil
             recoilVel += (-RECOIL_K * (recoilPos - recoilTarget) - RECOIL_D * recoilVel) * delta;
             recoilPos += recoilVel * delta;
             gunGroup.position.z = -0.45 + recoilPos;
 
-            // Projectiles
+            // Player projectiles
             for (let i = projectiles.length - 1; i >= 0; i--) {
                 const p = projectiles[i];
                 p.life -= delta;
                 if (p.life <= 0) { scene.remove(p.mesh); projectiles.splice(i, 1); continue; }
                 p.mesh.position.addScaledVector(p.dir, 55 * delta);
+                
                 const pBox = new THREE.Box3().setFromObject(p.mesh);
+                
+                // Check wall collision
+                let hitWall = false;
                 for (const box of collisionBoxes) {
-                    if (pBox.intersectsBox(box)) { scene.remove(p.mesh); projectiles.splice(i, 1); break; }
+                    if (pBox.intersectsBox(box)) { hitWall = true; break; }
                 }
+                
+                // Check bot collision
+                let hitBot = false;
+                for (let j = bots.length - 1; j >= 0; j--) {
+                    const bot = bots[j];
+                    const botBox = new THREE.Box3().setFromObject(bot.mesh);
+                    if (pBox.intersectsBox(botBox)) {
+                        bot.health -= 34;
+                        hitBot = true;
+                        
+                        // Update health bar
+                        const healthPercent = Math.max(0, bot.health / bot.maxHealth);
+                        const healthBar = bot.mesh.children[5];
+                        if (healthBar) {
+                            healthBar.scale.x = healthPercent;
+                            healthBar.position.x = -(1 - healthPercent) * 0.4;
+                            if (healthPercent < 0.3) {
+                                healthBar.material.color.setHex(0xFF0000);
+                            } else if (healthPercent < 0.6) {
+                                healthBar.material.color.setHex(0xFFFF00);
+                            }
+                        }
+                        
+                        if (bot.health <= 0) {
+                            scene.remove(bot.mesh);
+                            bots.splice(j, 1);
+                            updateBotCountUI();
+                            playHit();
+                            
+                            // Respawn bot after delay
+                            setTimeout(() => {
+                                const spawnPoints = [[-30, -30], [30, -30], [-30, 30], [30, 30]];
+                                const sp = spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
+                                createBot(sp[0] + (Math.random() - 0.5) * 10, sp[1] + (Math.random() - 0.5) * 10);
+                                updateBotCountUI();
+                            }, 3000);
+                        }
+                        break;
+                    }
+                }
+                
+                if (hitWall || hitBot) { scene.remove(p.mesh); projectiles.splice(i, 1); }
             }
+
+            // Enemy projectiles
+            for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
+                const p = enemyProjectiles[i];
+                p.life -= delta;
+                if (p.life <= 0) { scene.remove(p.mesh); scene.remove(p.trail); enemyProjectiles.splice(i, 1); continue; }
+
+                const prevPos = p.mesh.position.clone();
+                p.mesh.position.addScaledVector(p.dir, 30 * delta);
+
+                // Update tracer trail
+                const trailPos = p.trail.geometry.attributes.position.array;
+                const trailLen = p.trailLen;
+                trailPos[0] = prevPos.x;
+                trailPos[1] = prevPos.y;
+                trailPos[2] = prevPos.z;
+                trailPos[3] = p.mesh.position.x;
+                trailPos[4] = p.mesh.position.y;
+                trailPos[5] = p.mesh.position.z;
+                p.trail.geometry.attributes.position.needsUpdate = true;
+
+                const pBox = new THREE.Box3().setFromObject(p.mesh);
+
+                // Check wall collision
+                let hitWall = false;
+                for (const box of collisionBoxes) {
+                    if (pBox.intersectsBox(box)) { hitWall = true; break; }
+                }
+
+                // Check player collision
+                const playerBox = new THREE.Box3(
+                    new THREE.Vector3(camera.position.x - 0.3, camera.position.y - 0.8, camera.position.z - 0.3),
+                    new THREE.Vector3(camera.position.x + 0.3, camera.position.y + 0.8, camera.position.z + 0.3)
+                );
+
+                if (playerBox.intersectsBox(pBox)) {
+                    const hitDir = new THREE.Vector3().subVectors(p.origin, camera.position).normalize();
+                    showHitIndicator(hitDir);
+                    damagePlayer(15);
+                    scene.remove(p.mesh);
+                    scene.remove(p.trail);
+                    enemyProjectiles.splice(i, 1);
+                    continue;
+                }
+
+                if (hitWall) { scene.remove(p.mesh); scene.remove(p.trail); enemyProjectiles.splice(i, 1); }
+            }
+
+            // Update bots
+            bots.forEach(bot => updateBotAI(bot, delta, time));
 
             // Physics
             if (isGrounded) {
@@ -683,7 +1064,6 @@ import Layout from '../../layouts/Layout.astro';
                 if (worldVelocity.y <= 0) isGrounded = true;
             }
 
-            // Head bob
             if (isGrounded && horizRun > 0.1) {
                 headBobPhase += delta * 10 * (horizRun / MAX_WALK);
                 currentObj.position.y = 1.6 + 0.04 * Math.sin(headBobPhase);
@@ -697,7 +1077,6 @@ import Layout from '../../layouts/Layout.astro';
     }
 
     window.addEventListener('resize', () => {
-        if (!camera || !renderer) return;
         width = window.innerWidth;
         height = window.innerHeight;
         camera.aspect = width / height;
@@ -713,9 +1092,15 @@ html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
 .game-container { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
 #game-canvas-container { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 5; background-color: #C4B8A8; }
 #game-canvas-container canvas { display: block; width: 100% !important; height: 100% !important; outline: none; }
+#hit-indicator { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 40; opacity: 0; }
 #ui-layer { position: absolute; inset: 0; pointer-events: none; font-family: 'Space Grotesk', system-ui, sans-serif; color: #3D3630; z-index: 10; }
 .game-header, .modal-window, .back-btn, .sys-btn { pointer-events: auto; }
 #crosshair { position: absolute; left: 50%; top: 50%; width: 3px; height: 3px; transform: translate(-50%, -50%); border-radius: 50%; background: rgba(232, 160, 96, 0.95); box-shadow: 0 0 0 1.5px rgba(61, 54, 48, 0.4), 0 0 6px rgba(232, 160, 96, 0.5); z-index: 20; }
+#hud { position: absolute; bottom: 2rem; left: 2rem; display: flex; flex-direction: column; gap: 0.8rem; z-index: 25; }
+#health-bar-container { width: 200px; height: 20px; background: rgba(61, 54, 48, 0.8); border-radius: 4px; overflow: hidden; position: relative; display: flex; align-items: center; justify-content: center; }
+#health-bar { height: 100%; width: 100%; background: linear-gradient(90deg, #00AA44, #00FF66); transition: width 0.2s ease; }
+#health-text { position: absolute; font-size: 0.75rem; font-weight: 700; color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+#bot-count { font-size: 0.85rem; font-weight: 600; color: #8B3030; text-shadow: 0 1px 2px rgba(255,255,255,0.3); }
 .game-header { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.5rem; background: linear-gradient(to bottom, rgba(196, 184, 168, 0.9), transparent); z-index: 30; }
 .back-btn { text-decoration: none; color: #5A5048; border: 1px solid rgba(90, 80, 72, 0.3); border-radius: 6px; padding: 0.4rem 0.7rem; font-size: 0.85rem; background: rgba(232, 221, 208, 0.6); backdrop-filter: blur(8px); display: flex; align-items: center; gap: 0.3rem; transition: all 0.2s ease; }
 .back-btn:hover { background: rgba(232, 160, 96, 0.2); border-color: #E8A060; color: #B87050; }
