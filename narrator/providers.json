@@ -1,0 +1,61 @@
+{
+  "_doc": "Tried top to bottom; optional fastModels replace models when the request budget is <= 4000 ms (live reactions); within a provider, models are tried in order. Every provider here speaks the OpenAI chat-completions API. A provider is skipped when it's disabled or its keyEnv isn't set. 'body' is merged into each request (per-provider quirks). 'models' may be overridden with the env var NARRATOR_MODELS_<ID> (comma-separated).",
+  "providers": [
+    {
+      "id": "groq",
+      "enabled": true,
+      "baseURL": "https://api.groq.com/openai/v1",
+      "keyEnv": "GROQ_API_KEY",
+      "models": ["llama-3.3-70b-versatile", "qwen/qwen3-32b"],
+      "timeoutMs": 4000,
+      "body": {}
+    },
+    {
+      "id": "gemini",
+      "enabled": true,
+      "baseURL": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "keyEnv": "GEMINI_API_KEY",
+      "models": ["gemini-3.8-flash", "gemini-3.5-flash-lite"],
+      "fastModels": ["gemini-3.5-flash-lite", "gemini-flash-lite-latest"],
+      "timeoutMs": 5000,
+      "body": { "reasoning_effort": "low" }
+    },
+    {
+      "id": "openrouter",
+      "enabled": true,
+      "baseURL": "https://openrouter.ai/api/v1",
+      "keyEnv": "OPENROUTER_API_KEY",
+      "models": ["google/gemma-4-31b-it:free", "nvidia/nemotron-3-super-120b-a12b:free", "google/gemma-4-26b-a4b-it:free", "openrouter/free"],
+      "timeoutMs": 9000,
+      "headers": { "HTTP-Referer": "https://shvnk.in", "X-Title": "Still Warm" },
+      "body": { "reasoning": { "effort": "low", "exclude": true } }
+    },
+    {
+      "id": "opencode",
+      "enabled": true,
+      "baseURL": "https://opencode.ai/zen/v1",
+      "keyEnv": "OPENCODE_API_KEY",
+      "models": ["grok-code", "qwen3-coder"],
+      "timeoutMs": 8000,
+      "body": {}
+    },
+    {
+      "id": "cerebras",
+      "enabled": true,
+      "baseURL": "https://api.cerebras.ai/v1",
+      "keyEnv": "CEREBRAS_API_KEY",
+      "models": ["llama-3.3-70b"],
+      "timeoutMs": 4000,
+      "body": {}
+    },
+    {
+      "id": "ollama",
+      "enabled": false,
+      "baseURL": "http://localhost:11434/v1",
+      "keyEnv": "",
+      "models": ["gemma3:4b"],
+      "timeoutMs": 8000,
+      "body": {}
+    }
+  ]
+}

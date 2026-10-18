@@ -1,0 +1,149 @@
+@font-face{font-family:"Departure Mono";src:url(../assets/fonts/DepartureMono-Regular.woff2) format("woff2");font-display:swap}
+:root{
+  --night:#0b0f14; --salt:#e7e3da; --salt-64:rgba(231,227,218,.64); --salt-38:rgba(231,227,218,.38);
+  --signal:#c4372c; --hiss:rgba(231,227,218,.08);
+  --sans:"Archivo",system-ui,sans-serif; --mono:"Departure Mono",ui-monospace,monospace;
+  --t-fast:120ms; --t-mid:280ms; --t-slow:900ms; --ease:cubic-bezier(.2,0,0,1);
+  --gutter:clamp(16px,4.5vw,64px); --bar:5.5vh;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}
+html,body{height:100%;background:var(--night);color:var(--salt);overflow:hidden}
+body{font-family:var(--sans);font-synthesis:none;font-variation-settings:"wdth" 100;-webkit-font-smoothing:antialiased;
+  user-select:none;-webkit-user-select:none;touch-action:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+body.holding{cursor:none}
+canvas#gl{position:fixed;inset:0;width:100%;height:100%;display:block}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+/* equipment labels: condensed, uppercase, tight (DYMO / engraved panel), never spaced-out mono */
+.label{font-family:var(--sans);font-variation-settings:"wdth" 68;font-weight:600;font-size:12px;letter-spacing:.02em;text-transform:uppercase;line-height:1.2}
+.dim{color:var(--salt-38)}
+
+#bars i{position:fixed;left:0;right:0;height:var(--bar);background:#06080b;z-index:2;transform:scaleY(0);transition:transform var(--t-slow) var(--ease)}
+#bars i:first-child{top:0;transform-origin:top} #bars i:last-child{bottom:0;transform-origin:bottom}
+body.playing #bars i{transform:none}
+#scrim{position:fixed;left:0;right:0;bottom:0;height:46vh;z-index:3;pointer-events:none;
+  background:linear-gradient(to top,rgba(11,15,20,.7),rgba(11,15,20,0))}
+
+.screen{position:fixed;inset:0;z-index:5;transition:opacity var(--t-slow) var(--ease)}
+.screen.gone{opacity:0;pointer-events:none}
+
+/* title = an equipment plate, lower left; the toggle sits right on the same baseline */
+#plate{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;padding:0 var(--gutter) calc(var(--gutter) + 2vh)}
+.plate .label{color:var(--salt-64)}
+h1{font-family:var(--sans);font-variation-settings:"wdth" 62;font-weight:700;font-size:clamp(64px,12vw,168px);
+  line-height:.86;letter-spacing:-.01em;margin:.12em 0 .18em -.04em}
+.logline{font-size:13px;color:var(--salt-64)}
+.revisit{margin-top:.6rem;font-size:15px;color:var(--salt-64)}
+.controls{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+#begin,#again{background:none;border:1px solid var(--hiss);color:var(--salt);padding:12px 16px 11px;cursor:pointer;
+  transition:border-color var(--t-mid) var(--ease),background-color var(--t-mid) var(--ease),transform var(--t-fast) var(--ease)}
+#begin:not(:disabled):active,#again:active{transform:scale(.96)}
+#begin .label{font-size:14px}
+#begin:disabled{cursor:progress;color:var(--salt-38)}
+#begin:not(:disabled):hover,#again:hover{border-color:var(--salt-38);background:var(--hiss)}
+#begin:focus-visible,#again:focus-visible{outline:1px solid var(--salt);outline-offset:3px}
+/* transport arrows drawn in currentColor (Archivo and Departure Mono have no U+25B8/U+25C2; fallback glyphs mismatch) */
+#begin:not(:disabled) .label::after,#again::after{content:"";display:inline-block;height:.62em;margin-left:.5em;background:currentColor;vertical-align:.02em}
+#begin:not(:disabled) .label::after{width:.5em;clip-path:polygon(0 0,100% 50%,0 100%)}
+#again::after{width:1em;clip-path:polygon(0 50%,50% 0,50% 50%,100% 0,100% 100%,50% 50%,50% 100%)}
+
+/* top-right of the letterbox: ON AIR bulb + 4-digit tape counter */
+#deck{position:fixed;top:0;right:0;height:var(--bar);z-index:4;display:flex;align-items:center;gap:18px;padding:0 var(--gutter);
+  opacity:0;transition:opacity var(--t-slow) var(--ease)}
+body.playing #deck{opacity:1}
+.bulb{display:flex;align-items:center;gap:8px;font:600 11px/1 var(--sans);font-variation-settings:"wdth" 68;letter-spacing:.02em;color:var(--salt-38)}
+.bulb i{width:9px;height:9px;border-radius:50%;background:#3a1714;transition:background-color var(--t-fast) linear,box-shadow var(--t-fast) linear}
+body.onair .bulb{color:var(--salt)}
+body.onair .bulb i{background:var(--signal);box-shadow:0 0 6px 1px rgba(196,55,44,.55)}
+.counter{display:flex;font-family:var(--mono);font-size:15px;font-variant-numeric:tabular-nums;color:var(--salt);
+  border:1px solid var(--hiss);padding:3px 4px 2px}
+.counter b{display:block;width:1ch;height:1.2em;line-height:1.2em;overflow:hidden;font-weight:400;position:relative;margin:0 1px}
+.counter b span{position:absolute;left:0;top:0;height:1.2em;line-height:1.2em;transition:transform var(--t-mid) var(--ease)}
+
+/* the broadcast transcript: a log, lower left, with a tape-time gutter */
+#log{position:fixed;left:var(--gutter);bottom:calc(var(--bar) + 4.5vh);z-index:4;width:min(46rem,calc(100% - 2 * var(--gutter)));
+  display:flex;flex-direction:column;gap:.55rem;pointer-events:none}
+.row{display:grid;grid-template-columns:5.2em 1fr;gap:1.1rem;align-items:baseline}
+.row .stamp{font-family:var(--mono);font-size:12px;color:var(--salt-38);font-variant-numeric:tabular-nums}
+.row .text{font-family:var(--sans);font-variation-settings:"wdth" 100;font-weight:400;font-size:clamp(19px,1.9vw,26px);line-height:1.35;
+  max-width:34ch;text-wrap:pretty;color:var(--salt)}
+.row.old .text{color:var(--salt-38)}
+.row.big .text{font-variation-settings:"wdth" 75;font-weight:650;font-size:clamp(28px,3.4vw,44px);text-transform:uppercase;letter-spacing:0}
+.row .text .c{opacity:0}
+.row.in .text .c{animation:tune 260ms steps(3,end) forwards;animation-delay:var(--d)}
+.row.out .text .c.gone{animation:drop 80ms steps(1,end) forwards;animation-delay:var(--d)}
+.row.out{transition:opacity 200ms linear .55s;opacity:0}
+@keyframes tune{0%{opacity:0}40%{opacity:.25}70%{opacity:.6}100%{opacity:1}}
+@keyframes drop{to{opacity:0}}
+/* machine output: the AI writes in teletype, with a block caret */
+.row.tty .text{font-family:var(--mono);font-size:clamp(15px,1.45vw,19px);line-height:1.5;max-width:44ch;color:var(--salt)}
+.row.tty .caret{display:inline-block;width:.6em;height:1em;vertical-align:-.12em;background:var(--salt);margin-left:2px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.row.tty .sign{display:block;margin-top:.2rem;font-size:12px;color:var(--salt-38)}
+/* the one typed moment: a reply line in the transcript itself */
+#log.typing{pointer-events:auto}
+.row.you .stamp{color:var(--signal)}
+/* the monitor's lines (snap*): the tape speaks, not the room */
+.row.mon .text{color:var(--signal)}
+.row.you input{width:100%;background:transparent;border:0;border-bottom:1px solid var(--salt-38);color:var(--salt);
+  font:400 clamp(17px,1.6vw,21px) var(--mono);padding:2px 0 4px;outline:none;caret-color:var(--salt)}
+.row.you input:focus{border-bottom-color:var(--salt)}
+.row.you .meta{display:flex;justify-content:space-between;gap:12px;margin-top:8px;font-size:13px;color:var(--salt-38)}
+.row.you .skip{background:none;border:0;color:var(--salt-64);cursor:pointer;padding:4px 0;font:600 12px var(--sans);font-variation-settings:"wdth" 68;text-transform:uppercase}
+.row.you .skip{position:relative}
+.row.you .skip::after{content:"";position:absolute;inset:50% -14px auto;height:44px;translate:0 -50%}
+.row.you .skip:hover{color:var(--salt)}
+.row.you .skip:focus-visible{outline:1px solid var(--salt);outline-offset:3px}
+/* voices in their own ink: she is salt, the band is cold, the older captures are amber */
+.row.vx-radio .text{color:#a3c6d6}
+.row.vx-radio.old .text{color:rgba(163,198,214,.38)}
+.row.vx-older .text{color:#c8a878}
+.row.vx-older.old .text{color:rgba(200,168,120,.38)}
+.row.vx-tape .text{color:#b7b0a4}
+body.typing{cursor:auto}
+
+/* credits = the tape box label (J-card), a narrow left column */
+#credits{display:flex;align-items:center;padding:0 var(--gutter)}
+.jcard{width:min(25rem,100%);border:1px solid var(--salt-38);padding:20px 20px 16px;background:rgba(11,15,20,.82)}
+.jcard h2{font-variation-settings:"wdth" 62;font-weight:700;font-size:44px;line-height:.9;letter-spacing:-.01em}
+.jcard .side{font:600 11px var(--sans);font-variation-settings:"wdth" 68;text-transform:uppercase;color:var(--salt-64);margin:6px 0 14px}
+.jcard dl > div{display:grid;grid-template-columns:7.5em 1fr;gap:12px;padding:7px 0;border-top:1px solid var(--hiss);font-size:13px;line-height:1.35}
+.jcard dt{font:600 11px/1.5 var(--sans);font-variation-settings:"wdth" 68;text-transform:uppercase;color:var(--salt-38)}
+.jcard dd{color:var(--salt)}
+.jcard .lead dd{font-size:15px;font-weight:500}
+.jcard .lead{border-top-color:var(--salt-38)}
+.jcard #again{margin-top:14px;width:100%}
+#credits{background:rgba(11,15,20,.55)}
+body.credits #log{z-index:6;left:calc(var(--gutter) + 25rem + 3rem);bottom:auto;top:50%;transform:translateY(-50%);
+  width:min(30rem,calc(100% - 25rem - 3rem - 2 * var(--gutter)))}
+@media (max-width:900px){
+  #credits{align-items:flex-end;padding-bottom:var(--gutter)}
+  body.credits #log{left:var(--gutter);top:calc(var(--gutter) + 8px);transform:none;width:calc(100% - 2 * var(--gutter))}
+}
+.noscript{position:fixed;left:var(--gutter);bottom:var(--gutter)}
+
+@media (max-width:640px){
+  #plate{flex-direction:column;align-items:flex-start;justify-content:flex-end}
+  .controls{align-items:flex-start;text-align:left}
+  .row{grid-template-columns:3.8em 1fr;gap:.8rem}
+  #log{bottom:calc(var(--bar) + 3vh)}
+}
+@media (prefers-reduced-motion:reduce){
+  .row.in .text .c{animation:none;opacity:1}
+  .row.out .text .c.gone{animation:none}
+  .row.out{transition:opacity var(--t-mid) linear;opacity:0}
+  .counter b span{transition:none}
+  .row.tty .caret{animation:none}
+  #bars i{transition:none}
+}
+/* v2 code pass: the hard cut to black, diegetic choices, her words kept in the log */
+#scrim{transition:opacity 1.1s var(--ease)}
+body.cut #scrim{z-index:6;top:0;height:100%;opacity:1;background:var(--night);transition:opacity 80ms linear}
+.row.pick .text{max-width:44ch}
+.row.pick button{display:flex;gap:.9em;align-items:baseline;background:none;border:0;color:var(--salt-64);cursor:pointer;text-align:left;font:inherit;padding:2px 0;max-width:100%;pointer-events:auto}
+.row.pick button .k{font-family:var(--mono);font-size:12px;color:var(--salt-38);min-width:1.2em}
+.row.pick button .t{font-family:var(--sans);font-variation-settings:"wdth" 100;font-weight:400;font-size:clamp(17px,1.7vw,22px);line-height:1.3;color:var(--salt-64)}
+.row.pick button:hover .t,.row.pick button:focus-visible .t{color:var(--salt)}
+.row.pick button:focus-visible{outline:1px solid var(--salt);outline-offset:2px}
+.row.said .text,.row.said .stamp{color:var(--salt-64)}
+body.choosing{cursor:default}

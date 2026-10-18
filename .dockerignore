@@ -1,0 +1,10 @@
+node_modules
+dist
+.git
+.astro
+narrator/.env
+**/.env
+*.log
+.idea
+.vscode
+.drafts
