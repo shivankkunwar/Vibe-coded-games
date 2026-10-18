@@ -1,0 +1,3 @@
+# Dead Air lives in a subfolder with relative asset paths.
+# The grid links with a trailing slash; this catches direct visits without one.
+/games/dead-air /games/dead-air/ 301

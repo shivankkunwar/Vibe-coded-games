@@ -2,6 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<script>
+  // All asset paths are relative to this folder. A directory URL that lost its trailing
+  // slash (e.g. /games/dead-air) would resolve them one level too high, so put it back.
+  if (!location.pathname.endsWith('/') && !/\.[a-z0-9]+$/i.test(location.pathname)) location.replace(location.pathname + '/' + location.search + location.hash);
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>RN-9 · 1612 kHz</title>
 <meta name="description" content="Dead Air. A relay station on a salt flat. Hold to rewind.">
